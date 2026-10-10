@@ -51,7 +51,9 @@ or in two steps: `/plugin marketplace add anivar/agentic-sdlc`, then
 npx skills add anivar/agentic-sdlc -g
 ```
 
-Do not install both ways into Claude Code; the plugin already carries the skills.
+Do not install both ways into Claude Code; the plugin already carries the skills. The skill files
+carry Claude Code's `argument-hint` field, which the skills CLI tolerates; the claude.ai skill
+upload is not a supported path.
 
 **Every agent and every person**, the git hooks, from inside a repository:
 
@@ -93,13 +95,13 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 | `plain-voice` | The decision first, current state only, open points left open, misses in the headline, no rhetorical structure, no dashes as punctuation, no tool attribution | VOICE-1 to VOICE-13, ATTR-1, ATTR-2 |
 | `review-change` | Findings on the introducing change at its head sha, one per thread in Conventional Comments, a summary that ends in a decision, a mutation check before trusting a test, an adversarial read of your own work | REVIEW-1 to REVIEW-10 |
 | `plan-project` | One plan file: outcome with measures, decisions as options, assumptions tied to tests, dated steps with done-when, gates, risks, rollout, cut order; the turn ends after the plan | PLAN-1 to PLAN-9 |
-| `grill-plan` | Rounds of numbered questions over the settled frontier, each with a recommended answer; facts looked up, decisions put to the decider | GRILL-1 to GRILL-4 |
+| `grill-plan` | Rounds of numbered questions over the settled frontier, each with a recommended answer; facts looked up, decisions put to the decider | GRILL-1 to GRILL-3 |
 | `decision-records` | Glossary, decision records and dated research documents, as tables with calibration, naming systems and roles, never people | DECIDE-1 to DECIDE-6 |
 | `cut-tickets` | One ticket per real work item with acceptance and blockers, no identifiers or names, full links, published only after approval | TICKET-1 to TICKET-6 |
 | `test-first` | Seams agreed first, red before green, expected values from an independent source, mocks at boundaries only, commits gated on exit codes | TEST-1 to TEST-7 |
 | `thin-slices` | One pull request per step, nothing half-done, scope held, staging by path, a go-ahead per commit, push and post, secrets never printed | SLICE-1 to SLICE-8, STAGE-1, PUSH-1, PUSH-2, SECRET-1, SECRET-2, PROD-1, ASK-1 to ASK-3 |
 | `deep-modules` | The vocabulary and moves for deep modules: interface as the test surface, two adapters make a seam, design it twice with consent | DESIGN-1 to DESIGN-5 |
-| `setup-conventions` | One-time repository setup: the rules block, tracker and conventions files, the hook config, the workflow and the ruleset as a pull request | SETUP-1 to SETUP-3 |
+| `setup-conventions` | One-time repository setup: the rules block, tracker and conventions files, the hook config, and the forge's check (workflow and ruleset, or the GitLab job) as a pull request | SETUP-1 to SETUP-3 |
 
 ### Mechanisms
 
@@ -200,7 +202,7 @@ attribution patterns by default, and accountability rather than origination in t
 ## Configuration
 
 A repository may carry `.agentic-sdlc.json` at its root
-([schema](schemas/config.schema.json), [template](templates/agentic-sdlc.json)). Every key has
+([schema](schemas/config.schema.json), [template](skills/setup-conventions/assets/agentic-sdlc.json)). Every key has
 a default; an absent file means the defaults.
 
 | Key | Default | Rule |
@@ -253,7 +255,7 @@ a default; an absent file means the defaults.
 
 The plugin, the skills and the git hooks are forge-neutral. For the merge request check,
 `agentic-sdlc check-mr` reads the predefined `CI_MERGE_REQUEST_*` variables and the commits since
-the merge base; [`templates/gitlab-ci.yml`](templates/gitlab-ci.yml) is the job to include.
+the merge base; [`gitlab-ci.yml`](skills/setup-conventions/assets/gitlab-ci.yml) is the job to include.
 
 ## Try the hook by hand
 
@@ -281,8 +283,7 @@ Each prints the decision, the rule ids and the reason. `--json` prints what the 
 │                          config.py, registry.py, record.py, hook.py (adapter), cli.py
 ├── rules/registry.json    every rule, stable ids, mechanism, owner
 ├── schemas/               config and registry JSON Schemas
-├── skills/<name>/         SKILL.md and references/ per skill
-├── templates/             what setup-conventions writes into a repository; the GitLab CI job
+├── skills/<name>/         SKILL.md, references/ and NOTICE per skill; setup-conventions/assets/ holds what it writes
 ├── rulesets/              the branch ruleset to import
 ├── .pre-commit-hooks.yaml the three git hooks for the pre-commit framework
 ├── evals/                 behavioural cases for `claude plugin eval`

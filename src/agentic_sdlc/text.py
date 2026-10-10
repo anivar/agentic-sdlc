@@ -185,7 +185,7 @@ VOICE_PATTERNS: list[tuple[str, str, str, str]] = [
         "VOICE-8",
         "evidence word without a tag",
         "warn",
-        r"(?i)\b(?:100%|zero data loss|on track|confirmed|resolved)\b(?!.*\b(?:Verified|Measured|Inferred|Planned)\b)",
+        r"(?i)(?<!\")(?<!is )(?<!are )(?<!was )(?<!were )(?<!been )(?<!be )(?<!the )\b(?:100%|zero data loss|on track|confirmed|resolved)\b(?!\")(?!.*\b(?:Verified|Measured|Inferred|Planned)\b)",
     ),
 ]
 

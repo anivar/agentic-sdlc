@@ -427,7 +427,10 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
                 )
             if fields.get("license", "") == "":
                 problems.append(f"{folder.name}: license missing")
-            cited = set(RULE_ID_RE.findall(body))
+            prose = FRONTMATTER_RE.sub("", body, count=1)
+            for reference in sorted(folder.glob("references/*.md")):
+                prose += "\n" + reference.read_text(encoding="utf-8", errors="replace")
+            cited = set(RULE_ID_RE.findall(prose))  # the prose, not the frontmatter list
             unknown = sorted(cited - known)
             if unknown:
                 problems.append(f"{folder.name}: cites unknown rule ids {', '.join(unknown)}")
@@ -436,6 +439,11 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
             listed_match = re.search(r"\brules:\s*([A-Z0-9 -]+)", fields.get("metadata", ""))
             if listed_match:
                 listed = set(listed_match.group(1).split())
+                listed_only = sorted((listed & known) - cited)
+                if listed_only:
+                    problems.append(
+                        f"{folder.name}: lists {', '.join(listed_only)} in metadata.rules but never cites them"
+                    )
                 body_only = sorted(cited - listed)
                 if body_only:
                     problems.append(

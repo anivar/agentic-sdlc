@@ -14,7 +14,7 @@ Date: <date> · Topic: <folder> · Calibration: see each finding
 ## Sources
 | Source | Read | Where |
 |---|---|---|
-| <document, transcript, page> | in full / partial (<which part>) | <link or path> |
+| <document, record, page> | in full / partial (<which part>) | <link or path> |
 
 ## Method
 <The exact commands or queries, so the work is never redone.>
@@ -32,7 +32,6 @@ Date: <date> · Topic: <folder> · Calibration: see each finding
 ## Rules
 
 - Say which sources were read in full and which were not (EVID-4).
-- Quotes are verbatim only after they were compared with the source (EVID-3). Check speaker
-  attribution before quoting a transcript.
+- Quotes are verbatim only after they were compared with the source (EVID-3).
 - Numbers carry their query (EVID-5).
 - No individuals named; roles and systems (DECIDE-4).

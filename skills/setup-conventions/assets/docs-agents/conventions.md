@@ -30,10 +30,16 @@ Findings only on the introducing change at its head sha, one per thread in Conve
 Comments, a summary that ends in a decision (REVIEW-1, REVIEW-2, REVIEW-3). The mutation check
 runs on at least one new condition (REVIEW-4).
 
+## Production
+
+| Target | Where | Rule |
+|---|---|---|
+| <production system> | <how it is reached> | read-only unless the decider says otherwise for that action (PROD-1) |
+
 ## Mechanisms in this repository
 
 | Mechanism | Where |
 |---|---|
 | Claude Code hook | the agentic-sdlc plugin; settings in `.agentic-sdlc.json` |
-| Pull request text and secrets check | `.github/workflows/conventions.yml` calling `anivar/agentic-sdlc` at a pinned tag |
+| Pull request or merge request text check | `.github/workflows/conventions.yml` calling `anivar/agentic-sdlc` at a pinned tag, or the `conventions` job in `.gitlab-ci.yml` |
 | Branch rules | the ruleset imported from `rulesets/main-protected.json` |

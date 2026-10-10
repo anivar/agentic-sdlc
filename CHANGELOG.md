@@ -2,7 +2,7 @@
 
 ## 1.0.0 (unreleased)
 
-First release. Eleven skills, ninety-six rules in `rules/registry.json`: thirteen enforced by the
+First release. Eleven skills, ninety-five rules in `rules/registry.json`: thirteen enforced by the
 Claude Code hook, four of those by the native git hooks as well; nine by the reusable workflow
 (attribution and secrets on every call, the six mechanical voice rules when the caller names
 `voice-paths`); one by the ruleset. The hook on the Bash tool fails closed: without `python3` on
@@ -60,6 +60,32 @@ broken guard never blocks reading a file.
 - `git commit -n` was parsed as a dry run; it is `--no-verify`, so a commit that skipped the
   repository's hooks passed with no ask. It is refused now (GUARD-1).
 
+### Corrected before release, from a second read of the skills on 2026-10-10
+
+- Five `derived_from` lines understated what was taken from the upstream: the pre-agreed seams
+  and the independent source of expected values (tdd), the mutation probe (code-review-and-quality),
+  the approval round and the ticket templates (to-tickets), the design-session habits
+  (domain-modeling), the voice catalogue (unslop). Credited now in the skills, in the registry
+  notes, and in a `NOTICE` inside each derived skill folder, so a skills.sh install carries the
+  source notice the MIT licence requires.
+- `/setup-conventions` pointed at `templates/` at the repository root, which a skills.sh install
+  does not copy; the templates live under the skill now, the skill branches on GitHub, GitLab or
+  another forge, and asks which agent file to create when neither exists.
+- plan-project's template lacked the tables PLAN-4 and PLAN-5 require; added, with the ladder on
+  the gate line. Three eval graders could fail a run that followed its skill; corrected.
+- test-first sent refactoring to review-change, which has no refactoring step; a refactor is its
+  own slice. thin-slices prescribed the interactive `git add -p`; hunks go through
+  `git apply --cached`. The mutation probe is stated as safe on the working copy.
+- GRILL-4 (conduct in a discussion) is cut, as are the sentences that were the author's own
+  channel habits rather than engineering rules (the customer clause in VOICE-1, the wide-audience
+  checklist, the meeting-record clauses in EVID-4, the brand clause in VOICE-11); VOICE-13 and
+  DECIDE-4 are narrowed to what applies to anyone.
+- The change-description rule and the self-review list were each stated three times; plain-voice
+  and review-change own them, the others cite the id. `check-skills` now requires every id a
+  skill lists to be cited in its body, so the coverage table's Cited-by column is exact.
+- Codex sidecars for the two skills that publish or configure; the no-op `user-invocable: true`
+  lines dropped.
+
 ### Added after the read
 
 - Native git hooks: `agentic-sdlc hooks install` writes `commit-msg` (ATTR-1, ATTR-2),
@@ -92,7 +118,8 @@ broken guard never blocks reading a file.
   `examples` that the test suite runs through the guard and expects to decide as keyed; the
   three that need a strict configuration, a staged file or a file-tool event (ATTR-2, SECRET-1,
   GUARD-2) have their own tests. The registry schema and `validate` check both fields.
-- `agentic-sdlc check-mr` for GitLab merge request pipelines, with `templates/gitlab-ci.yml`;
+- `agentic-sdlc check-mr` for GitLab merge request pipelines, with the job template under
+  `skills/setup-conventions/assets/`;
   `agentic-sdlc bench` (on the development machine a parse-only decision takes under 1 ms and a
   decision that consults git, such as a commit's staged diff or a push's branch, about 5 ms).
 

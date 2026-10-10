@@ -8,15 +8,14 @@ description: >
   Triggers on: "draft", "write up", "humanise", "rewrite this", "tone", "voice", "summarise for",
   a message about to be posted, a commit or pull request description, a document for a team.
 license: MIT
-user-invocable: true
 compatibility: Any text. The mechanical subset runs as `agentic-sdlc lint-voice`.
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
   version: 1.0.0
   tags: writing, voice, style, change-description, attribution
-  derived_from: unslop (cursor/plugins, pstack, MIT) for the pattern catalogue idea; the rules here are the author's own
-  rules: VOICE-1 VOICE-2 VOICE-3 VOICE-4 VOICE-5 VOICE-6 VOICE-7 VOICE-8 VOICE-9 VOICE-10 VOICE-11 VOICE-12 VOICE-13 ATTR-1 ATTR-2 EVID-1
+  derived_from: unslop (cursor/plugins, pstack, MIT), whose catalogue VOICE-3 to VOICE-7 and the sentence-case, straight-quote and no-emoji lines coincide with; VOICE-1, VOICE-2 and VOICE-8 to VOICE-13 are the author's own
+  rules: VOICE-1 VOICE-2 VOICE-3 VOICE-4 VOICE-5 VOICE-6 VOICE-7 VOICE-8 VOICE-9 VOICE-10 VOICE-11 VOICE-12 VOICE-13 ATTR-1 ATTR-2 EVID-1 TICKET-3 TICKET-4
 ---
 
 # Plain voice
@@ -24,13 +23,14 @@ metadata:
 Text written for a reader who did not watch the work. The reader wants the decision, the
 evidence under it, and nothing that performs. These rules apply to every deliverable; the
 mechanical subset is enforced by `agentic-sdlc lint-voice` and the attribution rules by the
-hook and the CI check.
+hook and the CI check where the plugin or the workflow is installed; elsewhere this text is the
+rule. The decider is the role that approves and gives go-aheads: a role, not a person.
 
 ## The rules
 
 | Id | Rule | In practice |
 |---|---|---|
-| VOICE-1 | Lead with the decision | First line: the answer, the outcome, or the miss. Evidence underneath. Read the ask back and size the response to it. The simplest path for the customer comes first; the system defect is its own tracked item. |
+| VOICE-1 | Lead with the decision | First line: the answer, the outcome, or the miss. Evidence underneath. Read the ask back and size the response to it. |
 | VOICE-2 | Current state only | No narration of earlier versions ("rebuilt", "retargeted", "now split"), no version or branch labels in prose (links carry the sha). A repository document states the end state, never "today X, target Y". |
 | VOICE-3 | No dashes as punctuation | No em dash, no spaced en dash. End the sentence or use a comma. |
 | VOICE-4 | No rhetorical structure | No triads for rhythm, no counting framings ("two things", "three fixes"), no "that is why", no aphoristic last line, no throat clearing. |
@@ -38,11 +38,11 @@ hook and the CI check.
 | VOICE-6 | Banned words | seamless, robust, best-in-class, leverage, comprehensive, world-class, delve, tapestry, testament, cutting-edge, game-changing. <!-- voice-lint: skip --> |
 | VOICE-7 | No throat clearing | "It is worth noting", "note that", "importantly", "in summary": delete the preface, keep the sentence. |
 | VOICE-8 | Evidence words carry evidence | "Live", "100%", "PASS", "confirmed", "resolved", "on track", "zero data loss" appear only with the evidence that earns them. "Green" is never a status: give the sha, the date and the lane, or the gate. See evidence (EVID-1). |
-| VOICE-9 | Open points stay open | A reviewer's point, or one the decider has not settled: options, who decides, by when. Before a push, list every normative sentence that settles a question and put it to the decider. |
+| VOICE-9 | Open points stay open | A reviewer's point, or one the decider has not settled: options, who decides, by when. Before a repository document or plan is pushed, list every normative sentence that settles a question and put it to the decider. |
 | VOICE-10 | Misses are reported as misses | Scope cuts and skipped steps go in the headline. No apology language, no hedging, no softening. |
-| VOICE-11 | Shared deliverables are technical only | No named individuals, no credit or blame, no reading of motives, no "ours" and "yours". Name the system and who picks it up. Restate a people finding as a system property. Never attribute a rejected idea to a person. Describe tools by function, not brand; quoted evidence stays verbatim. |
+| VOICE-11 | Shared deliverables are technical only | No named individuals, no credit or blame, no reading of motives, no "ours" and "yours". Name the system and who picks it up. Restate a people finding as a system property. Never attribute a rejected idea to a person. |
 | VOICE-12 | Verbatim words | The decider's words are used as given. An accepted draft is not polished further. |
-| VOICE-13 | Guide, do not commit the decider | A draft in the decider's name never promises their work. Findings, a suggested order, what good looks like; the owner named in the plan carries the work. |
+| VOICE-13 | A draft promises nothing its signer did not say | Findings, a suggested order, what good looks like; the owner named in the plan carries the work. |
 | ATTR-1 | No tool attribution in change text | No trailer naming a tool, no "Generated with" footer, no robot emoji beside one, in commits, pull requests, merge bodies, issues or release notes. The signer is the operator of record for the change. A role marker such as `Operated-by: agent` is not attribution and passes. Enforced by the hook and the CI check. |
 | ATTR-2 | Strict mode | A repository may refuse any vendor mention in change text. Opt-in through `.agentic-sdlc.json`. |
 
@@ -60,25 +60,19 @@ hook and the CI check.
 
 ## Change descriptions
 
-The first line is short, imperative and standalone: "Delete the FizzBuzz RPC" (the example is
-Google's, from its engineering practices). The body says
+The first line is short, imperative and standalone: "Delete the FizzBuzz RPC". The body says
 what changes and why, with the context not visible in the diff, and names what it deliberately
 leaves out. Before a pull request exists, tell the decider in a few plain sentences what it
 does, why, and what it leaves out. No ticket keys, incident numbers, infrastructure identifiers,
 secret paths, partner URLs or colleagues' names in code, comments, tests or fixtures; they
 belong in the change title and description, and every reference to another change is a full
-link.
+link (TICKET-3, TICKET-4). thin-slices and cut-tickets point here for the text they produce.
 
 ## Drafts in someone else's name
 
 Write like that person types in a team channel: plain declaratives, what they saw, what they
 want, by when. Lead with the decision. End when the content ends. Never post, send, comment or
-save the draft: show it and stop. A request that mentions both posting and drafts means drafts.
-
-## Before posting to a wide audience
-
-Statuses under a day old, no named person's pending action, every third-party claim linkable,
-history cut.
+save the draft: show it and stop.
 
 ## The lint
 
@@ -117,3 +111,8 @@ offer (VOICE-6, VOICE-5), the open point named with who decides and by when (VOI
 | The tags behind the evidence words | evidence |
 | Review threads and summaries in this voice | review-change |
 | Tickets in this voice | cut-tickets |
+
+## Sources
+
+The change-description example is Google's, from its engineering practices (CC BY 4.0). unslop
+(cursor/plugins, pstack, MIT) is the catalogue VOICE-3 to VOICE-7 coincide with.

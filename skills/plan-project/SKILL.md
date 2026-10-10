@@ -6,10 +6,9 @@ description: >
   with an owner and a "done when", gates between phases, risks with triggers, a rollout with a
   rollback, a cut order and a never-cut list, and the commitments made along the way. The plan
   is written, shown, and the turn ends; implementation starts only after the decider approves.
-  Triggers on: "plan", "write a plan", "project plan", "roadmap", "spec", "specify",
+  Triggers on: "write a plan", "project plan", "plan this project", "roadmap", "spec", "specify",
   "requirements", "before we build", "how would we approach", "PRD", "what are the steps".
 license: MIT
-user-invocable: true
 argument-hint: "<project or change> [plan file path]"
 compatibility: Any project. Writes docs/plan/PLAN.md unless told another path.
 metadata:
@@ -18,7 +17,7 @@ metadata:
   version: 1.0.0
   tags: planning, specification, assumptions, gates, rollout, decisions
   derived_from: spec-driven-development (addyosmani/agent-skills, MIT) for the human review gate between phases and the assumption list; the template and the decider profile are the author's own
-  rules: PLAN-1 PLAN-2 PLAN-3 PLAN-4 PLAN-5 PLAN-6 PLAN-7 PLAN-8 PLAN-9 EVID-1 VOICE-2 VOICE-9 VOICE-13 GRILL-3
+  rules: PLAN-1 PLAN-2 PLAN-3 PLAN-4 PLAN-5 PLAN-6 PLAN-7 PLAN-8 PLAN-9 EVID-1 VOICE-2 VOICE-8 VOICE-9 VOICE-13 GRILL-3 REVIEW-7
 ---
 
 # Plan a project
@@ -46,6 +45,11 @@ Evidence tags: Verified (source opened), Measured (number plus query), Inferred,
 What changes, for whom. 2 to 4 measures, each baseline → target, with how it is measured.
 Not doing: <explicit non-goals>.
 
+## Behaviour change
+Breaks existing behaviour: yes / no. What changes exactly: <…>. Parked: <…>.
+| Failure | Allowed impact | Mechanism that bounds it | Test that proves the bound |
+| Client | Before | After | Compatible: yes / no / after <step> |
+
 ## Decisions
 | # | Decision | Options | Proposal | Decides | By |
 
@@ -53,7 +57,8 @@ Not doing: <explicit non-goals>.
 | # | Assumption | Evidence | Proven by (test, query, vendor answer) | Status: open / proven / broken |
 
 ## Plan
-### Phase <n>: <name>. Gate: <what must be true to move on>, reviewed by <role>
+### Phase <n>: <name>. Gate: <what must be true to move on>, reviewed by <role>.
+Ladder: self-service <what>; then <role> within <time>; lanes that pass without the decider <which>; ceiling <role> within <time>
 | ID | Step | Owner | Days | Depends on | Done when | Date | Status |
 
 ## Risks
@@ -77,28 +82,26 @@ Cut in this order: <list>. Never cut: <list>.
 | PLAN-1 | One plan file, dated steps with done-when | A step is at most three days, has one owner, a date the owner named, and a "done when" someone else can check. Each step is reversible, or says how it is undone. A gate sits between phases. |
 | PLAN-2 | Assumptions tied to tests | Number each assumption, tie it to the test, query or vendor answer that proves it, or mark it open. The first step attacks the riskiest assumption. Vertical slices that work end to end, not layers. |
 | PLAN-3 | Cut order and never-cut list | Say what goes first if time runs short and what never goes. A slip is reported before its date; a scope cut goes in the headline; a baseline never moves silently. |
-| PLAN-4 | Behaviour change stated up front | Does it break existing behaviour, what exactly changes, what was parked. A failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops business activity. |
-| PLAN-5 | Gates carry escalation ladders | Self-service, a named decider role, automatic lanes, a ceiling, each with a response time. |
-| PLAN-6 | No resourcing, trivia or blocker words | No headcount, no operational trivia, no alarm phrases in a repository document, no follow-up-ticket line where a decision belongs. |
+| PLAN-4 | Behaviour change stated up front | Does it break existing behaviour, what exactly changes, what was parked. A failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops the business. |
+| PLAN-5 | Gates carry escalation ladders | A self-service path, a named role, the lanes that pass without the decider, a ceiling, each with a response time. |
+| PLAN-6 | No resourcing, trivia or blocker words | No headcount, no operational trivia, no alarm phrases (blocker, urgent, critical) in a repository document, no follow-up-ticket line where a decision belongs; severity lives in the tracker. |
 | PLAN-7 | Decisions in the decider's words | Options in the table; the decision recorded in the decider's own words, with who decides and by when. The decider approves; each delivery step names a team or role as its owner. |
-| PLAN-8 | Newest production version | Check what the platform runs in production, then decide. Never design on a beta; never drop a version for compatibility. |
-| PLAN-9 | Platform changes prove out on staging | Validated there by the decider before production. |
+| PLAN-8 | Newest production version | Check what the platform runs in production, then decide. Never design on a beta; never choose an older version to stay compatible with something not in production. |
+| PLAN-9 | Platform changes prove out on staging | Validated there before production. |
 
 ## Sizing
 
 A size with no basis is marked as a guess. Numbers carry their source: a query, `file:line` at a
 named commit, or a link (EVID-1).
 
-## Guardrails against false claims
+## Calibration, voice and the self-review
 
-- Tag every factual clause Verified, Measured, Inferred or Planned. Never upgrade a level.
-- "Live", "100%", "PASS", "confirmed", "zero data loss", "on track", "resolved" need matching evidence. <!-- voice-lint: skip -->
-- Banned outright: seamless, robust, best-in-class, leverage, comprehensive, world-class. <!-- voice-lint: skip -->
-- Plain declaratives, no rhetorical structure, no decorative lines, numbered lists only for real
-  work items, current state only (plain-voice).
-- Before handing over: read it as the receiver; check every claim traces to a source; check every
-  assumption is tested or marked open; check nothing is promised that the decider did not promise;
-  check the decider could explain the plan in three sentences without the document.
+Every factual clause carries its tag and a number carries its source (EVID-1); the evidence words
+need evidence (VOICE-8); the plan states the current state only (VOICE-2); an open point stays
+open with who decides and by when (VOICE-9); the plan commits teams and roles, never the decider's
+own work (VOICE-13); the Decisions table is settled through grill-plan (GRILL-3). Before handing
+over, run the self-review in review-change (REVIEW-7) and one check of its own: the decider could
+explain the plan in three sentences without the document.
 
 ## Repository AGENTS.md, when there is code
 

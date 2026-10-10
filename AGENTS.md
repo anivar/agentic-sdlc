@@ -27,12 +27,14 @@ file is about changing the product.
    A new mechanism goes into those modules, not into the adapters.
 5. `docs/coverage.md` is generated. Run `agentic-sdlc coverage` after a registry change; CI
    fails when it is stale.
-6. Every `skills/*/SKILL.md` cites existing rule ids, has `name` equal to its folder, a
-   description under 1024 characters, and a license line. `check-skills` enforces it.
+6. Every `skills/*/SKILL.md` cites existing rule ids, lists in `metadata.rules` exactly the ids its
+   body cites, has `name` equal to its folder, a description under 1024 characters, and a license
+   line; a skill rewritten from another carries a `NOTICE` with the source's copyright line.
+   `check-skills` enforces the first four.
 7. The repository tree carries no attribution patterns and no key-shaped literals;
    `check-skills` scans for both. It also refuses any token the maintainer lists in
    `AGENTIC_SDLC_FORBIDDEN` (CI) or `.agentic-sdlc-forbidden.txt` (local, gitignored).
-8. Text in `README.md`, `docs/`, `skills/` and `templates/` passes `lint-voice --fail-on fail`.
+8. Text in `README.md`, `docs/` and `skills/` passes `lint-voice --fail-on fail`.
    A line that must quote a banned word carries `voice-lint: skip` in an HTML comment.
 9. Actions in workflows are pinned by commit sha with `persist-credentials: false`, and every
    workflow declares `permissions`.

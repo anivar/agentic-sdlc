@@ -4,26 +4,26 @@ description: >
   One-time repository setup for the agentic-sdlc skills: explore what the repository already
   has, confirm the choices with the decider, then write one "Rules that bind" block into the
   existing AGENTS.md or CLAUDE.md, docs/agents/tracker.md and docs/agents/conventions.md, and
-  .agentic-sdlc.json with the hook settings, and prepare the reusable workflow and the ruleset
-  import as a pull request. Run once per repository, by the person who owns it.
+  .agentic-sdlc.json with the hook settings, and prepare the forge's check (the reusable workflow
+  and the ruleset on GitHub, the CI job on GitLab) as a pull request. Run once per repository, by
+  the person who owns it.
 license: MIT
-user-invocable: true
 disable-model-invocation: true
 argument-hint: "[repository root]"
-compatibility: Any git repository on GitHub; the tracker section also records GitLab, local markdown or another tracker.
+compatibility: Any git repository; GitHub gets the workflow and the ruleset, GitLab the CI job, any other forge the git hooks. The tracker section records GitHub, GitLab, local markdown or another tracker.
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
   version: 1.0.0
   tags: setup, conventions, agents-md, tracker, configuration
   derived_from: setup-matt-pocock-skills (mattpocock/skills, MIT) for the explore-confirm-write shape and the tracker templates; the configuration, workflow and ruleset steps are the author's own
-  rules: SETUP-1 SETUP-2 SETUP-3 ASK-1 ASK-3 DECIDE-5 EVID-8 GUARD-2
+  rules: SETUP-1 SETUP-2 SETUP-3 ASK-1 ASK-2 ASK-3 DECIDE-5 EVID-8 GUARD-2
 ---
 
 # Set up conventions
 
 A prompt-driven setup, not a script. Explore, present what was found, confirm, then write.
-Nothing is committed, pushed or imported without its own go-ahead (ASK-1, ASK-3).
+Nothing is committed, pushed or imported without its own go-ahead (ASK-1, ASK-2, ASK-3).
 
 ## 1. Explore
 
@@ -34,7 +34,8 @@ Read what exists; assume nothing (EVID-8):
   already there.
 - `docs/agents/`, `.agentic-sdlc.json`, `GLOSSARY.md`, `docs/adr/`, `.scratch/`.
 - `.github/workflows/`: an existing CI gate the ruleset should require.
-- Rulesets and branch protection already applied (`gh ruleset list`).
+- Rulesets and branch protection already applied (`gh ruleset list` on GitHub; the protected
+  branches of the project on GitLab).
 - Monorepo signals: a workspace file, several packages with their own source.
 
 ## 2. Present and confirm
@@ -52,19 +53,21 @@ Lead each section with the recommended answer so the decider can accept it in a 
 
 ## 3. Write
 
-In this order, each shown before it is written:
+In this order, each shown before it is written and each path checked first (DECIDE-5):
 
 1. The "Rules that bind" block into the file that exists, in place if a block is already there
-   (SETUP-1). Template: `templates/AGENTS-block.md` in this plugin. Never create a second agent
-   file beside the existing one.
-2. `docs/agents/tracker.md` (SETUP-2) from `templates/docs-agents/tracker.md`.
-3. `docs/agents/conventions.md` from `templates/docs-agents/conventions.md`.
-4. `.agentic-sdlc.json` from `templates/agentic-sdlc.json`, with the confirmed branches and
+   (SETUP-1). Template: `assets/AGENTS-block.md` beside this skill. Never create a second agent
+   file beside the existing one; when neither `AGENTS.md` nor `CLAUDE.md` exists, ask which one
+   to create and never pick.
+2. `docs/agents/tracker.md` (SETUP-2) from `assets/docs-agents/tracker.md`.
+3. `docs/agents/conventions.md` from `assets/docs-agents/conventions.md`.
+4. `.agentic-sdlc.json` from `assets/agentic-sdlc.json`, with the confirmed branches and
    mode. `agentic-sdlc validate` passes on it.
 5. If the tracker is local markdown: `.scratch/` in `.gitignore`.
-6. A workflow file that calls `anivar/agentic-sdlc/.github/workflows/conventions.yml` at a
-   pinned tag, and the import command for `rulesets/main-protected.json` with the required
-   check names adjusted to this repository's gate.
+6. On GitHub: a workflow file that calls `anivar/agentic-sdlc/.github/workflows/conventions.yml`
+   at a pinned tag, and the import command for `rulesets/main-protected.json` with the required
+   check names adjusted to this repository's gate. On GitLab: the job from `assets/gitlab-ci.yml`
+   in `.gitlab-ci.yml`. Elsewhere: the native git hooks (`agentic-sdlc hooks install`).
 
 All of it lands as one reviewed pull request (SETUP-3). The ruleset import is run by the
 decider after the merge, since it changes the forge's settings.
@@ -74,7 +77,7 @@ decider after the merge, since it changes the forge's settings.
 Say which skills now read from these files, and that re-running the setup is only needed to
 switch trackers or change the mode. Editing `docs/agents/*.md` and `.agentic-sdlc.json` by hand
 is the normal path afterwards. An edit to `.agentic-sdlc.json`, a git hook, `.claude/settings.json`
-or `.pre-commit-config.yaml` changes what the guard does, so it is described and confirmed before it
+or `.pre-commit-config.yaml` changes what the guard does, so it is described and agreed before it
 is written (GUARD-2).
 
 ## Companion skills

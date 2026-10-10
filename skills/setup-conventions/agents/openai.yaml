@@ -1,0 +1,4 @@
+interface:
+  display_name: "Setup conventions"
+  short_description: "One-time repository setup for the agentic-sdlc skills"
+  allow_implicit_invocation: false

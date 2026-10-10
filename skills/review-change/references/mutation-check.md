@@ -27,7 +27,10 @@ before repairing a test; a better-shaped test often beats a patched one. Tests t
 a range or a sign are the class of test that lets wrong figures through; prefer a hand-derived
 expected value with the derivation in the test's docstring.
 
-## In a worktree
+## Where the probe runs
 
-Run the probe in a worktree or a temporary repository when the checkout carries uncommitted
-work (REVIEW-10). Never on the working copy with changes you have not committed.
+The copy-aside probe touches one file and restores it, so it is safe on the working copy, also in
+a self-review before the commit. A probe that touches more than one file or runs a destructive
+command runs in a worktree or a temporary repository (REVIEW-10). When no suite can run (an inline
+diff, a review without the repository), skip the check and say so in the summary: "mutation check
+not run".

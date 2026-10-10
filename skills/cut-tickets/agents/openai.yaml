@@ -1,0 +1,3 @@
+interface:
+  display_name: "Cut tickets"
+  short_description: "Break an approved plan into vertical-slice tickets"

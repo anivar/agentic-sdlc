@@ -10,7 +10,6 @@ description: >
   boundary", "make this testable", "too many small modules", "ports and adapters", "design it
   twice", "which abstraction".
 license: MIT
-user-invocable: true
 compatibility: Any codebase. The fan-out in design-it-twice needs an agent runtime that can run sub-agents.
 metadata:
   author: Anivar Aravind
@@ -18,18 +17,20 @@ metadata:
   version: 1.0.0
   tags: design, modules, interfaces, seams, testability, architecture
   derived_from: codebase-design (mattpocock/skills, MIT) for the glossary, deepening and design-it-twice; the consent rule for fan-out is the author's own
-  rules: DESIGN-1 DESIGN-2 DESIGN-3 DESIGN-4 DESIGN-5 TEST-1 DECIDE-1
+  rules: DESIGN-1 DESIGN-2 DESIGN-3 DESIGN-4 DESIGN-5 TEST-1 DECIDE-1 VOICE-6
 ---
 
 # Deep modules
 
-After John Ousterhout's deep modules and Michael Feathers' seams. Design deep modules: a lot of behaviour behind a small interface, placed at a clean seam, testable
-through that interface. The aim is payback for callers, locality for maintainers, and
+Design deep modules: a lot of behaviour behind a small interface, placed at a clean seam,
+testable through that interface. The aim is payback for callers, locality for maintainers, and
 testability for everyone.
 
 ## Vocabulary
 
-Use these words exactly; do not substitute "component", "service", "API" or "boundary".
+Use these words exactly in module design; do not substitute "component", "service" or "API"
+for module and interface, or "boundary" for seam. "Boundary" keeps its other senses: a bounded
+context, and the system boundary where test-first puts its mocks.
 
 | Term | Is | Avoid |
 |---|---|---|
@@ -39,7 +40,7 @@ Use these words exactly; do not substitute "component", "service", "API" or "bou
 | Depth | Behaviour a caller or a test can exercise per unit of interface learned. Deep: a lot behind a little. Shallow: the interface is nearly as complex as the implementation. | |
 | Seam | Michael Feathers' term: a place where behaviour can be altered without editing in that place; where a module's interface lives. Where the seam goes is its own decision. | boundary |
 | Adapter | A concrete thing that satisfies an interface at a seam. A role, not a substance. | |
-| Payback | What callers get from depth: one implementation pays back across N call sites and M tests. | |
+| Payback | What callers get from depth: one implementation pays back across N call sites and M tests. | leverage (Ousterhout's and the upstream's word; kept out of this set because VOICE-6 bans it as a verb) <!-- voice-lint: skip --> |
 | Locality | What maintainers get from depth: change, bugs and knowledge concentrate in one place. | |
 
 ## The rules
@@ -59,7 +60,7 @@ surface small: fewer methods mean fewer tests, fewer parameters mean simpler set
 
 ## Rejected framings
 
-Depth as a ratio of implementation lines to interface lines (Ousterhout's framing) rewards padding; depth is payback.
+Depth as a ratio of implementation lines to interface lines rewards padding; depth is payback.
 "Interface" as the language keyword or a class's public methods is too narrow. "Boundary" is
 overloaded with bounded contexts; say seam or interface.
 
@@ -72,6 +73,11 @@ overloaded with bounded contexts; say seam or interface.
 
 | Need | Skill |
 |---|---|
-| Agreeing the seams before tests | test-first |
+| Agreeing the seams before tests (TEST-1) | invoke `test-first` after this skill |
 | Recording a seam placement that is hard to reverse | decision-records |
 | The questions that settle the design | grill-plan |
+
+## Sources
+
+John Ousterhout, A Philosophy of Software Design (deep modules, design it twice). Michael
+Feathers, Working Effectively with Legacy Code (seams). codebase-design (mattpocock/skills, MIT).

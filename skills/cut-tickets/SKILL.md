@@ -9,7 +9,6 @@ description: >
   Triggers on: "cut tickets", "break this down", "create issues", "to tickets", "split into
   tasks", "what are the work items", "file the issues", "ticket this".
 license: MIT
-user-invocable: true
 argument-hint: "<plan path, spec path, issue link, or nothing for the conversation>"
 compatibility: Any tracker recorded in docs/agents/tracker.md; local markdown tickets when none is.
 metadata:
@@ -17,8 +16,8 @@ metadata:
   author_url: https://anivar.net
   version: 1.0.0
   tags: tickets, issues, planning, vertical-slices, tracker
-  derived_from: to-tickets (mattpocock/skills, MIT) for tracer-bullet slicing and the expand-contract sequence; the content rules are the author's own
-  rules: TICKET-1 TICKET-2 TICKET-3 TICKET-4 TICKET-5 TICKET-6 ASK-3 SETUP-2 VOICE-11
+  derived_from: to-tickets (mattpocock/skills, MIT) for tracer-bullet slicing, the expand-contract sequence, the approval round and the ticket templates; TICKET-3 and TICKET-4 are the author's own
+  rules: TICKET-1 TICKET-2 TICKET-3 TICKET-4 TICKET-5 TICKET-6 ASK-3 SETUP-2 VOICE-1 VOICE-11
 ---
 
 # Cut tickets
@@ -31,11 +30,11 @@ the tickets whose blockers are done.
 
 | Id | Rule | In practice |
 |---|---|---|
-| TICKET-1 | One ticket per real work item | Never one per checklist step. A vertical slice through schema, API, interface and tests, sized to one working session. Any prefactoring goes first. |
+| TICKET-1 | One ticket per real work item | Never one per checklist step. A vertical slice through schema, API, interface and tests, sized to one working session (one fresh context window for an agent). Any prefactoring goes first. |
 | TICKET-2 | Acceptance and blockers | What to build from the user's perspective, acceptance criteria someone else can check, the tickets that block it. Native dependency links where the tracker has them; a "Blocked by" line otherwise. |
-| TICKET-3 | No identifiers, secrets or names | No infrastructure identifiers, secret paths, partner URLs or colleagues' names. Describe the step and point to the internal runbook. Ownership reads "to be agreed with <team>". |
+| TICKET-3 | No identifiers, secrets or names | No infrastructure identifiers, secret paths, partner URLs or colleagues' names. Describe the step and point to the internal runbook. The owner is a team or role. |
 | TICKET-4 | Full links | Every reference to another change or ticket is a full link, never a bare number. |
-| TICKET-5 | Approval before publishing | Show the breakdown as a numbered list: title, blocked by, what it delivers. Ask about granularity, blocking edges, merges and splits. Publish only after approval, and publishing is a post (ASK-3). The parent item is never closed or edited by the breakdown. |
+| TICKET-5 | Approval before publishing | Show the breakdown as a numbered list: title, blocked by, what it delivers. Ask about granularity, blocking edges, merges and splits. Publish only after approval, and publishing is a post (ASK-3); on publish, apply the tracker's `ready-for-agent` label unless told otherwise (`docs/agents/tracker.md`). The parent item is never closed or edited by the breakdown. |
 | TICKET-6 | Wide refactors use expand and contract | A mechanical change that breaks thousands of call sites at once cannot be a slice. Expand (add the new form beside the old), migrate in batches sized by blast radius, contract (delete the old form). Each batch its own ticket, blocked by the expand; the contract blocked by every batch. |
 
 ## Where tickets go

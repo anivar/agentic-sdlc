@@ -107,6 +107,17 @@ def test_voice_findings_levels():
     assert all(text.voice_level(f) == "fail" for f in found)
 
 
+def test_voice_evidence_words_ignore_quotes_and_verb_uses():
+    quiet = (
+        'The "confirmed" word needs evidence.\nThe term is resolved and the confirmed branches '
+        "are listed.\n"
+    )
+    assert not [f for f in text.voice_findings(quiet) if f.rule == "VOICE-8"]
+    loud = text.voice_findings("Status: confirmed, migration on track.\n")
+    assert [f.rule for f in loud] == ["VOICE-8"]
+    assert text.voice_level(loud[0]) == "warn"
+
+
 def test_voice_skips_code_blocks():
     sample = "```\nseamless — robust\n```\nPlain sentence.\n"
     assert text.voice_findings(sample) == []

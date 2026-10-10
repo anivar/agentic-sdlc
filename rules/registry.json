@@ -247,7 +247,7 @@
       "owner": "plain-voice",
       "since": "1.0.0",
       "status": "active",
-      "notes": "CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
     },
     {
       "id": "VOICE-4",
@@ -260,7 +260,7 @@
       "owner": "plain-voice",
       "since": "1.0.0",
       "status": "active",
-      "notes": "The lint catches counting framings and \"that is why\"; triads and aphorisms are judged by the reader. CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+      "notes": "The triads clause coincides with unslop (cursor/plugins, pstack). The lint catches counting framings and \"that is why\"; triads and aphorisms are judged by the reader. CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
     },
     {
       "id": "VOICE-5",
@@ -273,7 +273,7 @@
       "owner": "plain-voice",
       "since": "1.0.0",
       "status": "active",
-      "notes": "CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
     },
     {
       "id": "VOICE-6",
@@ -286,7 +286,7 @@
       "owner": "plain-voice",
       "since": "1.0.0",
       "status": "active",
-      "notes": "CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
     },
     {
       "id": "VOICE-7",
@@ -299,7 +299,7 @@
       "owner": "plain-voice",
       "since": "1.0.0",
       "status": "active",
-      "notes": "CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
     },
     {
       "id": "VOICE-8",
@@ -350,7 +350,7 @@
     {
       "id": "EVID-4",
       "title": "Read sources in full",
-      "statement": "A summary, digest or excerpt MUST NOT stand in for its source. The source is read in full, and the deliverable says which sources were read in full and which were not. When two records of one event exist, both are read and their disagreements are named.",
+      "statement": "A summary, digest or excerpt MUST NOT stand in for its source. The source is read in full, and the deliverable says which sources were read in full and which were not.",
       "mechanisms": [
         "skill"
       ],
@@ -383,7 +383,7 @@
     {
       "id": "EVID-7",
       "title": "Refute before filing",
-      "statement": "A finding against another team's work MUST be verified twice before it is filed, the second pass trying to refute it.",
+      "statement": "A finding against someone else's code MUST be verified twice before it is filed, the second pass trying to refute it.",
       "mechanisms": [
         "skill"
       ],
@@ -427,7 +427,7 @@
     {
       "id": "VOICE-9",
       "title": "Open points stay open",
-      "statement": "A point a reviewer raised, or one the decider has not settled, MUST be presented as open: the options, who decides, by when. Before a push, every normative sentence that settles a question is listed for the decider.",
+      "statement": "A point a reviewer raised, or one the decider has not settled, MUST be presented as open: the options, who decides, by when. Before a repository document or plan is pushed, every normative sentence that settles a question is listed for the decider.",
       "mechanisms": [
         "skill"
       ],
@@ -449,7 +449,7 @@
     {
       "id": "VOICE-11",
       "title": "Shared deliverables are technical only",
-      "statement": "A shared deliverable MUST name no individual, assign no blame or credit, read no one's motives, and use no \"ours\" and \"yours\"; it names the system and who picks it up. Tools are described by function, not brand; quoted evidence stays verbatim.",
+      "statement": "A shared deliverable MUST name no individual, assign no blame or credit, read no one's motives, and use no \"ours\" and \"yours\"; it names the system and who picks it up.",
       "mechanisms": [
         "skill"
       ],
@@ -470,8 +470,8 @@
     },
     {
       "id": "VOICE-13",
-      "title": "Guide, do not commit the decider",
-      "statement": "A draft in the decider's name MUST NOT promise the decider's own work (\"I'll review\", \"I'll send\", \"I'll follow up\"). It gives the findings, a suggested order and what good looks like; the team owns the work.",
+      "title": "A draft promises nothing its signer did not say",
+      "statement": "A draft in someone's name MUST promise nothing they did not say: it gives the findings, a suggested order and what good looks like, and the owner named in the plan carries the work.",
       "mechanisms": [
         "skill"
       ],
@@ -521,7 +521,8 @@
       ],
       "owner": "review-change",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "The probe (invert one condition, run the suite, restore) is rewritten from code-review-and-quality (addyosmani/agent-skills); the count and the dead-mutant reading are the author's."
     },
     {
       "id": "REVIEW-5",
@@ -559,7 +560,7 @@
     {
       "id": "REVIEW-8",
       "title": "Sort proposals by what ships",
-      "statement": "A speed, cost or infrastructure proposal MUST be sorted into internals-only or changes-what-ships (versioning, signing, distribution). The second kind needs a strong reason, stated.",
+      "statement": "A speed, cost or infrastructure proposal MUST be sorted into internals-only or changes the released artifact (versioning, signing, distribution). The second kind needs a strong reason, stated.",
       "mechanisms": [
         "skill"
       ],
@@ -626,7 +627,7 @@
     {
       "id": "PLAN-4",
       "title": "Behaviour change stated up front",
-      "statement": "A design or plan MUST say whether it breaks existing behaviour, the exact behaviour change and what was parked, and carry a failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops business activity.",
+      "statement": "A design or plan MUST say whether it breaks existing behaviour, the exact behaviour change and what was parked, and carry a failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops the business.",
       "mechanisms": [
         "skill"
       ],
@@ -637,7 +638,7 @@
     {
       "id": "PLAN-5",
       "title": "Gates carry escalation ladders",
-      "statement": "Any queue, gate or rule a plan proposes MUST carry its escalation ladder: self-service, a named decider role, automatic lanes, a ceiling, each with a response time.",
+      "statement": "Any queue, gate or rule a plan proposes MUST carry its escalation ladder: self-service, a named decider role, the lanes that pass without the decider, a ceiling, each with a response time.",
       "mechanisms": [
         "skill"
       ],
@@ -648,7 +649,7 @@
     {
       "id": "PLAN-6",
       "title": "No resourcing, trivia or blocker words",
-      "statement": "A plan MUST NOT contain headcount or resourcing, operational trivia, alarm phrases in a repository document, or a follow-up-ticket line in place of a decision.",
+      "statement": "A plan MUST NOT contain headcount or resourcing, operational trivia, alarm phrases (blocker, urgent, critical) in a repository document, or a follow-up-ticket line in place of a decision.",
       "mechanisms": [
         "skill"
       ],
@@ -670,7 +671,7 @@
     {
       "id": "PLAN-8",
       "title": "Newest production version",
-      "statement": "A design MUST use the newest version the platform runs in production, after checking availability. It is never designed on a beta and never drops a version for compatibility.",
+      "statement": "A design MUST use the newest version the platform runs in production, after checking availability. It is never designed on a beta and never chooses an older version to stay compatible with something not in production.",
       "mechanisms": [
         "skill"
       ],
@@ -681,7 +682,7 @@
     {
       "id": "PLAN-9",
       "title": "Platform changes prove out on staging",
-      "statement": "A platform or CI change MUST prove out on staging and be validated there by the decider before production.",
+      "statement": "A platform or CI change MUST prove out on staging and be validated there before production.",
       "mechanisms": [
         "skill"
       ],
@@ -726,17 +727,6 @@
       "notes": "Rewritten from grilling (mattpocock/skills)."
     },
     {
-      "id": "GRILL-4",
-      "title": "Questions before the room, direct answers in it",
-      "statement": "Before a discussion, three questions MUST be written and asked first. A direct question about authority MUST get a direct answer. A proposal carries a name, an owner and a date, or it is not a proposal.",
-      "mechanisms": [
-        "skill"
-      ],
-      "owner": "grill-plan",
-      "since": "1.0.0",
-      "status": "active"
-    },
-    {
       "id": "DECIDE-1",
       "title": "A record for a hard-to-reverse, surprising trade-off",
       "statement": "An architecture decision record MUST be written only when all three hold: the decision is hard to reverse, surprising without context, and the result of a real trade-off. One paragraph is enough.",
@@ -763,7 +753,7 @@
     {
       "id": "DECIDE-3",
       "title": "Knowledge in tables with calibration",
-      "statement": "Shared knowledge MUST go where the second reader can reach it, in the repository, as schema-constrained tables rather than prose, with calibration labelled honestly: \"unverified\", never blank.",
+      "statement": "Shared knowledge MUST go where the second reader can reach it, in the repository, as tables with fixed columns and calibration labelled honestly (\"unverified\", never blank) for glossaries, research documents and plan tables; the decision record is the prose exception, one paragraph.",
       "mechanisms": [
         "skill"
       ],
@@ -774,7 +764,7 @@
     {
       "id": "DECIDE-4",
       "title": "Records carry no names",
-      "statement": "A decision record, glossary or research document MUST name systems and roles, never individuals. A change that concerns a person carries no name in its branch, commit or description.",
+      "statement": "A decision record, glossary or research document MUST name systems and roles, never individuals.",
       "mechanisms": [
         "skill"
       ],
@@ -802,7 +792,8 @@
       ],
       "owner": "decision-records",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from the domain conventions of setup-matt-pocock-skills (mattpocock/skills)."
     },
     {
       "id": "TICKET-1",
@@ -859,7 +850,8 @@
       ],
       "owner": "cut-tickets",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from to-tickets (mattpocock/skills)."
     },
     {
       "id": "TICKET-6",
@@ -882,12 +874,13 @@
       ],
       "owner": "test-first",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
     },
     {
       "id": "TEST-2",
       "title": "Red before green",
-      "statement": "The failing test MUST be written first and only enough code to pass it follows: one seam, one test, one minimal implementation per cycle. Refactoring belongs to review, not to the loop.",
+      "statement": "The failing test MUST be written first and only enough code to pass it follows: one seam, one test, one minimal implementation per cycle. A refactor is its own slice after green (SLICE-3), not part of the loop.",
       "mechanisms": [
         "skill"
       ],
@@ -905,7 +898,8 @@
       ],
       "owner": "test-first",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
     },
     {
       "id": "TEST-4",
@@ -961,18 +955,20 @@
       ],
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "The size guidance follows code-review-and-quality (addyosmani/agent-skills)."
     },
     {
       "id": "SLICE-2",
       "title": "Nothing half-done reaches the shared branch",
-      "statement": "A step MUST be merged complete, with its tests, documentation and changelog entry, or not at all. Incomplete work stays behind a flag or on its branch.",
+      "statement": "A step MUST be merged complete, with its tests, documentation and, where the repository keeps one, its changelog entry, or not at all. Incomplete work stays behind a flag or on its branch.",
       "mechanisms": [
         "skill"
       ],
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from incremental-implementation (addyosmani/agent-skills)."
     },
     {
       "id": "SLICE-3",
@@ -1001,7 +997,7 @@
     {
       "id": "SLICE-5",
       "title": "Stage by path and read the index",
-      "statement": "Changes MUST be staged by path, with git add -p when another session may have edited the file, and git diff --cached --stat is read before the commit (STAGE-1).",
+      "statement": "Changes MUST be staged by path, as whole files by path or as hunks through git apply --cached when another session may have edited the file, and git diff --cached --stat is read before the commit (STAGE-1).",
       "mechanisms": [
         "skill"
       ],
@@ -1121,12 +1117,13 @@
       ],
       "owner": "deep-modules",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills), after Ousterhout's design it twice."
     },
     {
       "id": "SETUP-1",
       "title": "One block in the repository's agent file",
-      "statement": "The repository's AGENTS.md or CLAUDE.md MUST carry one \"Rules that bind\" block that points at docs/agents/ and .agentic-sdlc.json. The file that exists is edited; a second one is never created beside it.",
+      "statement": "The repository's AGENTS.md or CLAUDE.md MUST carry one \"Rules that bind\" block that points at docs/agents/ and .agentic-sdlc.json. The file that exists is edited; a second one is never created beside it. When neither file exists, the decider is asked which one to create; the skill never picks.",
       "mechanisms": [
         "skill"
       ],

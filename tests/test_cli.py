@@ -148,6 +148,17 @@ def test_check_skills_forbidden_tokens(tmp_path: Path, capsys, monkeypatch):
     assert code == 1 and "forbidden token present" in out
 
 
+def test_check_skills_requires_listed_ids_to_be_cited(tmp_path: Path, capsys):
+    listed_only = (
+        "---\nname: thin-slices\ndescription: ok\nlicense: MIT\nmetadata:\n  rules: STAGE-1 ASK-2\n---\n\n"
+        "STAGE-1 applies.\n"
+    )
+    root = make_repo_tree(tmp_path, listed_only)
+    code = run("check-skills", "--root", str(root))
+    out = capsys.readouterr().out
+    assert code == 1 and "lists ASK-2 in metadata.rules but never cites" in out
+
+
 def test_validate_and_coverage_roundtrip(tmp_path: Path, capsys):
     assert run("validate", "--root", str(ROOT)) == 0
     root = tmp_path / "cov"

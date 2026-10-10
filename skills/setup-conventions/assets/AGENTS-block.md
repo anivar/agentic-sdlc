@@ -13,6 +13,8 @@ The rule ids below are stable and defined in that repository's `rules/registry.j
 - Commits are gated on exit codes (TEST-5). One pull request per plan step, complete or not at
   all (SLICE-1, SLICE-2).
 - Every factual claim carries Verified, Measured, Inferred or Planned (EVID-1).
+- Before exploring an area, read `GLOSSARY.md` and the records under `docs/adr/` that touch it;
+  output that contradicts a record says so (DECIDE-6).
 
 Where things live: tickets and labels in `docs/agents/tracker.md`; decision records, glossary
 and voice settings in `docs/agents/conventions.md`; hook settings in `.agentic-sdlc.json`.
