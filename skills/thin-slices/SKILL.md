@@ -17,7 +17,7 @@ metadata:
   version: 1.0.0
   tags: implementation, git, pull-requests, staging, secrets, incremental
   derived_from: incremental-implementation (addyosmani/agent-skills, MIT) for the slice cycle and scope discipline; the git, secret and go-ahead rules are the author's own
-  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 PROD-1 ASK-1 ASK-2 ASK-3 REVIEW-6 TEST-5
+  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 REVIEW-6 TEST-5
 ---
 
 # Thin slices
@@ -38,7 +38,7 @@ that keep a change small enough to review.
 | SLICE-6 | A go-ahead per commit, per push, per post | Each waits for its own yes. Approval for one does not extend to the next (ASK-1, ASK-2, ASK-3, hook ask). |
 | SLICE-7 | Auto-merge only where allowed | Armed only where the decider allowed it for that repository and branch. A merge to a release branch is a deliberate human act. |
 | SLICE-8 | Fresh new files, confirmed deletions | Check the path is absent before writing a new file. Check a file is untracked before deleting it, or get the deletion confirmed. |
-| STAGE-1 | Stage by path | Hook: `git add -A`, `--all`, `.`, `-u` without paths, and `git commit -a` are refused. |
+| STAGE-1 | Stage by path | Hook: `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, and `git commit -a` are refused. `git add -A src/` passes. |
 | PUSH-1 | No force push to a protected branch | Hook: refused. A protected branch moves by merged pull request only. |
 | PUSH-2 | Moving a tag is confirmed and explained | Hook: asks, and says that every workflow triggered on tag pushes runs again and release assets may be rebuilt. |
 | SECRET-1 | No key-shaped literals | Hook: staged changes are scanned before the commit; CI runs gitleaks. Tests generate keys at runtime; documentation samples use placeholders. |
@@ -46,6 +46,7 @@ that keep a change small enough to review.
 | PROD-1 | Production is read-only | Unless the decider says otherwise for that action. |
 | REVIEW-6 | Confirm the diff is absent before merging | And re-diff a conflict resolution against the target's current file. |
 | TEST-5 | Gate on exit codes | `check && test && git commit`. |
+| TRACE-1 | An untraceable gated command is confirmed | Hook: a command that mentions a commit, push, bulk add or forge write the parser cannot trace (a variable, an interpreter, an unusual wrapper) asks. |
 
 ## The cycle
 

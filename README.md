@@ -48,8 +48,8 @@ npx skills add anivar/agentic-sdlc -g
 
 Do not install both ways into Claude Code; the plugin already carries the skills.
 
-**Replacing the upstream skills.** This set descends from, and replaces, these skills; keep one
-set installed so a prompt about tests or reviews has one answer:
+**The upstream skills.** This set descends from the skills below (see [NOTICE](NOTICE)). Keeping
+both installed gives a prompt about tests or reviews two answers; to keep one set:
 
 ```bash
 npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd to-tickets \
@@ -61,7 +61,7 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Component | Needs |
 |---|---|
-| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `gitleaks` optional, used when present. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim |
+| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `gitleaks` optional, used when present. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim. The hook has a 30 s budget; its own git and gitleaks calls stay under it |
 | The plugin | Claude Code 2.1.211 or newer for the forced prompt in auto mode; 2.1.295 or newer for `onFailure: block` |
 | The CI check | GitHub Actions; `gh` is preinstalled on the runners |
 | The skills | any agent that reads `SKILL.md` |
@@ -88,36 +88,68 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Rule | What happens | Where |
 |---|---|---|
-| ATTR-1 | a Co-Authored-By or Signed-off-by trailer naming a tool, a "Generated with" footer or the robot emoji in a commit, pull request, issue or release text: **denied** | hook, CI |
+| ATTR-1 | any trailer naming a tool, a "Generated with" footer, or the robot emoji beside one, in a commit, pull request, issue or release text: **denied** | hook; CI for pull request title, body and commits |
 | ATTR-2 | any vendor mention in change text when the repository opts into strict mode: **denied** | hook, CI |
-| STAGE-1 | `git add -A`, `--all`, `.`, `-u` without paths, `git commit -a`: **denied** | hook |
+| STAGE-1 | `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, `git commit -a`: **denied**; `git add -A src/` passes | hook |
 | PUSH-1 | a force push to, or deletion of, a protected branch: **denied** | hook, ruleset |
 | PUSH-2 | a force push of a tag: **asks**, and says that tag-triggered workflows run again | hook |
 | SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus gitleaks when installed) | hook, CI |
-| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**, in every permission mode | hook |
+| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. The forced prompt is documented for auto mode; what the other modes do is recorded per mode in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
+| TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper): **asks** | hook |
 | VOICE-3 to VOICE-8 | dashes as punctuation, counting framings, closing offers, banned words in the prose a repository names through `voice-paths`: **fails the check** | CI, when `voice-paths` is set |
 
 The hook reads the command the agent is about to run, parses it (chains, pipes, heredocs,
-message files), and returns one decision with the rule ids and the reason. Precedence is deny over
-ask over allow. Everything else runs without a decision from the hook.
+message files, shell wrappers such as `sh -c` and `eval`, `git -C` and a leading `cd`), and
+returns one decision with the rule ids and the reason. Precedence is deny over ask over allow.
+Everything else runs without a decision from the hook.
+
+What a refusal looks like:
+
+```
+$ agentic-sdlc guard 'git add -A'
+deny: STAGE-1
+  STAGE-1: Stage by path: stage named paths, then check git diff --cached --stat
+
+$ agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
+deny: ATTR-1, ASK-1
+  ATTR-1: No tool attribution in change text: tool trailer (Co-Authored-By: Claude <noreply@anthropic.com>)
+  ASK-1: A commit waits for a go-ahead: commit needs your go-ahead
+
+$ agentic-sdlc guard 'sh -c "git push --force origin main"'
+deny: PUSH-1, ASK-2
+  PUSH-1: No force push to a protected branch: force push to main; a protected branch moves by merged pull request
+  ASK-2: A push waits for a go-ahead: push to main needs your go-ahead
+
+$ agentic-sdlc guard 'gh pr merge 12 --squash'
+ask: ASK-3
+  ASK-3: A post waits for a go-ahead: gh pr merge publishes or changes something on the forge
+```
 
 ### What the mechanisms do not cover
 
 | Gap | Why | What covers it |
 |---|---|---|
 | Commands outside the Bash tool: MCP tools that post, `!`-prefixed commands typed by the user, other agents | hooks see Bash tool calls only | the skills' text; the CI check for pull request text |
-| The merge body typed at squash-merge time | the pull request workflow sees title, body and branch commits; the merge body is written after the checks ran | the hook, when the merge is run through the Bash tool |
+| The merge body typed at squash-merge time | the pull request workflow sees title, body and branch commits; the merge body is written after the checks ran | the hook, when the merge runs through the Bash tool with the body inline or in a file that exists; a body built by `$( … )` is not readable before it runs and the hook says so in its ask |
 | Commit-message rules on the forge | GitHub rulesets offer metadata rules on the Enterprise plan only | the required status check from the workflow |
 | A user who sets `disableAllHooks`, or a mod that approves after the hook | the hook is a plugin hook, not a managed one | the CI check; the ruleset |
 | The forced prompt under `acceptEdits` and `bypassPermissions` | the documentation states the auto-mode behaviour only | recorded per mode in [`CHANGELOG.md`](CHANGELOG.md) once observed |
+| A gated command the parser cannot see: a git call inside an interpreter (`python -c`, `node -e`), behind a shell alias or a variable (`$g push`), or a direct API call with `curl` | the parser follows wrappers, substitutions and `cd`, not program semantics | TRACE-1 asks when the text still names the operation; `posting.extra_commands` can name `curl`; the CI check and the ruleset are the backstops |
+| Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; the pull request check scans the resulting commits |
 
 ## Why no tool attribution
 
 The person who signs a change is the operator of record for it: the one who answers for what
 it does. A trailer or footer naming a tool records which product was open, not who is
-accountable, and it is the first thing a reader mistakes for the second. The hook strips the
+accountable, and it is the first thing a reader mistakes for the second. The hook refuses the
 attribution patterns; a repository that wants no vendor named at all in its history turns on
 strict mode.
+
+Accountability is not origination. A record can state that an agent operated a change without
+naming a product: a trailer such as `Operated-by: agent` names a role, passes ATTR-1, and sits
+beside the sign-off that names the person who answers for it. A repository that wants its
+history to carry origination adds that trailer to its commit template; one that does not
+records accountability only, and says so.
 
 ## Configuration
 
@@ -157,8 +189,12 @@ a default; an absent file means the defaults.
        with:
          strict: false
          ref: v1.0.0
-         voice-paths: "README.md docs"
    ```
+
+   Pin `ref` to the same tag as the `uses` line. The optional `voice-paths` input (for example
+   `"README.md docs"`) also fails the check on the mechanical voice rules over those files;
+   leave it out unless the repository wants that. Organisation accounts pass `GITLEAKS_LICENSE`
+   through `secrets:` for the gitleaks job.
 
 3. Import the ruleset, after editing the required check names to the repository's own:
 
@@ -168,7 +204,10 @@ a default; an absent file means the defaults.
 
 ## Try the hook by hand
 
+The CLI ships inside the plugin and is not on PyPI; run it from the repository with `uvx`:
+
 ```bash
+alias agentic-sdlc='uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc'
 agentic-sdlc guard 'git add -A'
 agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 agentic-sdlc guard 'git push --force origin main'
@@ -203,8 +242,8 @@ just test-stock       # the suite on the stock macOS python3
 just guard 'git add -A'
 ```
 
-CI runs the suite on Python 3.9 and 3.14, validates the plugin in strict mode, and installs every
-skill with the skills CLI into a throwaway home.
+CI runs the suite on Python 3.9 and 3.14 and on the stock macOS interpreter, validates the plugin
+in strict mode, and installs every skill with the skills CLI into a throwaway home.
 
 ## Ecosystem
 

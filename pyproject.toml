@@ -8,7 +8,7 @@ license = { text = "MIT" }
 authors = [{ name = "Anivar Aravind", email = "ping@anivar.net" }]
 keywords = ["agent-skills", "coding-agents", "sdlc", "code-review", "git-hooks", "claude-code", "cursor", "codex"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",

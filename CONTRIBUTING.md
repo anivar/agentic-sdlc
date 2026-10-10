@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions from people and from agents are welcome under the same rules.
+Contributions are welcome, however they were produced; a person signs off each commit.
 
 - Sign off every commit (`git commit -s`): the Developer Certificate of Origin, in your own
   name. No tool trailers and no generated-with footers; the signer is the operator of record for

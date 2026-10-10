@@ -5,8 +5,7 @@ file is about changing the product.
 
 ## How to work
 
-- One plan step at a time. The plan is private to the maintainer; a change says which rule ids
-  it touches.
+- One plan step at a time. A change says which rule ids it touches.
 - Commit only when `just check` exits 0: ruff, the test suite, `agentic-sdlc validate`,
   `agentic-sdlc check-skills`, `agentic-sdlc lint-voice`, `agentic-sdlc coverage --check` and
   `claude plugin validate --strict .` (TEST-5).
@@ -21,16 +20,16 @@ file is about changing the product.
 2. Every rule with `hook` in its mechanisms has a test in `tests/test_guard.py`, and a case in
    `tests/test_hook.py` when it changes the hook contract.
 3. The hook stays standard-library Python that runs on 3.9. No dependency is added to the
-   runtime path. `tests/` run on 3.9 and 3.14 in CI.
+   runtime path. `tests/` run on 3.9 and 3.14 in CI and on the stock macOS interpreter.
 4. `command.py` parses; `guard.py` decides; `text.py` matches; `hook.py` and `cli.py` adapt.
    A new mechanism goes into those modules, not into the adapters.
 5. `docs/coverage.md` is generated. Run `agentic-sdlc coverage` after a registry change; CI
    fails when it is stale.
 6. Every `skills/*/SKILL.md` cites existing rule ids, has `name` equal to its folder, a
    description under 1024 characters, and a license line. `check-skills` enforces it.
-7. The repository tree carries no attribution patterns, no key-shaped literals and no private
-   names. `check-skills` scans for the first two; the forbidden-token list for the third stays
-   out of the tree (an environment variable in CI, a gitignored file locally).
+7. The repository tree carries no attribution patterns and no key-shaped literals;
+   `check-skills` scans for both. It also refuses any token the maintainer lists in
+   `AGENTIC_SDLC_FORBIDDEN` (CI) or `.agentic-sdlc-forbidden.txt` (local, gitignored).
 8. Text in `README.md`, `docs/`, `skills/` and `templates/` passes `lint-voice --fail-on fail`.
    A line that must quote a banned word carries `voice-lint: skip` in an HTML comment.
 9. Actions in workflows are pinned by commit sha with `persist-credentials: false`, and every

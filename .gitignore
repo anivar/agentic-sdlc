@@ -7,4 +7,5 @@ dist/
 build/
 *.egg-info/
 .claude/settings.local.json
+.agentic-sdlc-forbidden.txt
 .DS_Store

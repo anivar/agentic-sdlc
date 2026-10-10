@@ -79,8 +79,8 @@ Cut in this order: <list>. Never cut: <list>.
 | PLAN-3 | Cut order and never-cut list | Say what goes first if time runs short and what never goes. A slip is reported before its date; a scope cut goes in the headline; a baseline never moves silently. |
 | PLAN-4 | Behaviour change stated up front | Does it break existing behaviour, what exactly changes, what was parked. A failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops business activity. |
 | PLAN-5 | Gates carry escalation ladders | Self-service, a named decider role, automatic lanes, a ceiling, each with a response time. |
-| PLAN-6 | No resourcing, trivia or blocker words | No headcount, no operational trivia, no "production blocker" in a repository document, no follow-up-ticket line where a decision belongs. |
-| PLAN-7 | Decisions in the decider's words | Options in the table; the decision recorded in the decider's own words, with who decides and by when. The decider approves and evaluates; delivery steps belong to the team. On an inherited programme the decider's role is to evaluate and unblock, never to own delivery. |
+| PLAN-6 | No resourcing, trivia or blocker words | No headcount, no operational trivia, no alarm phrases in a repository document, no follow-up-ticket line where a decision belongs. |
+| PLAN-7 | Decisions in the decider's words | Options in the table; the decision recorded in the decider's own words, with who decides and by when. The decider approves; each delivery step names a team or role as its owner. |
 | PLAN-8 | Newest production version | Check what the platform runs in production, then decide. Never design on a beta; never drop a version for compatibility. |
 | PLAN-9 | Platform changes prove out on staging | Validated there by the decider before production. |
 

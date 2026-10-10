@@ -34,6 +34,10 @@ on:
         description: Files or directories to run lint-voice over (VOICE-3 to VOICE-8); empty skips the lint
         type: string
         default: ""
+    secrets:
+      GITLEAKS_LICENSE:
+        description: Needed by gitleaks-action on organisation accounts; not needed on user accounts
+        required: false
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
@@ -87,3 +91,4 @@ jobs:
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

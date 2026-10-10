@@ -8,7 +8,7 @@ system in each mode. Record the observed behaviour per mode in `CHANGELOG.md`.
 
 ```bash
 tmp="$(mktemp -d)" && cd "$tmp" && git init -q -b main && git commit -q --allow-empty -m init
-claude --plugin-dir ~/code/personal/agentic-sdlc
+claude --plugin-dir <path to this repository>
 ```
 
 In the session, `/hooks` lists the PreToolUse hook under the plugin, and `/plugin` shows no

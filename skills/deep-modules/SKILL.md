@@ -23,7 +23,7 @@ metadata:
 
 # Deep modules
 
-Design deep modules: a lot of behaviour behind a small interface, placed at a clean seam, testable
+After John Ousterhout's deep modules and Michael Feathers' seams. Design deep modules: a lot of behaviour behind a small interface, placed at a clean seam, testable
 through that interface. The aim is payback for callers, locality for maintainers, and
 testability for everyone.
 
@@ -37,7 +37,7 @@ Use these words exactly; do not substitute "component", "service", "API" or "bou
 | Interface | Everything a caller must know to use the module correctly: types, invariants, ordering, error modes, required configuration, performance characteristics. | API, signature |
 | Implementation | What is inside the module. | |
 | Depth | Behaviour a caller or a test can exercise per unit of interface learned. Deep: a lot behind a little. Shallow: the interface is nearly as complex as the implementation. | |
-| Seam | A place where behaviour can be altered without editing in that place; where a module's interface lives. Where the seam goes is its own decision. | boundary |
+| Seam | Michael Feathers' term: a place where behaviour can be altered without editing in that place; where a module's interface lives. Where the seam goes is its own decision. | boundary |
 | Adapter | A concrete thing that satisfies an interface at a seam. A role, not a substance. | |
 | Payback | What callers get from depth: one implementation pays back across N call sites and M tests. | |
 | Locality | What maintainers get from depth: change, bugs and knowledge concentrate in one place. | |
@@ -59,7 +59,7 @@ surface small: fewer methods mean fewer tests, fewer parameters mean simpler set
 
 ## Rejected framings
 
-Depth as a ratio of implementation lines to interface lines rewards padding; depth is payback.
+Depth as a ratio of implementation lines to interface lines (Ousterhout's framing) rewards padding; depth is payback.
 "Interface" as the language keyword or a class's public methods is too narrow. "Boundary" is
 overloaded with bounded contexts; say seam or interface.
 

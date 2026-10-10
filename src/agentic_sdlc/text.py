@@ -75,7 +75,9 @@ def attribution_findings(text: str, cfg: config_mod.Config | None = None) -> lis
         if footer_re.search(line):
             findings.append(Finding("ATTR-1", "generated-with footer", number, stripped[:120]))
             continue
-        if ROBOT_RE.search(line):
+        if ROBOT_RE.search(line) and (
+            vendor_word.search(line) or re.search(FOOTER_VERBS, line, re.I)
+        ):
             findings.append(Finding("ATTR-1", "robot emoji", number, stripped[:120]))
             continue
         if strict_re is not None and strict_re.search(line):

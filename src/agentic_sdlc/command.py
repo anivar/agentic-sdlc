@@ -18,8 +18,55 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-OPERATORS = {"&&", "||", ";", ";;", "|", "|&", "&"}
-WRAPPERS = {"command", "exec", "nohup", "nice", "time", "sudo", "env", "builtin"}
+OPERATORS = {"&&", "||", ";", ";;", "|", "|&", "&", "(", ")", "{", "}"}
+# Programs that run another program: dropped, with their own options, before classification.
+# The value is the set of options that take an argument.
+WRAPPER_OPTION_ARGS: dict[str, set[str]] = {
+    "command": set(),
+    "exec": {"-a"},
+    "builtin": set(),
+    "nohup": set(),
+    "time": {"-f", "--format", "-o", "--output"},
+    "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U", "--user", "--group"},
+    "doas": {"-u", "-C"},
+    "env": {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"},
+    "nice": {"-n", "--adjustment"},
+    "ionice": {"-c", "-n", "-p", "--class", "--classdata"},
+    "timeout": {"-k", "--kill-after", "-s", "--signal"},
+    "xargs": {
+        "-n",
+        "-I",
+        "-i",
+        "-L",
+        "-l",
+        "-P",
+        "-s",
+        "-a",
+        "-d",
+        "-E",
+        "--max-args",
+        "--replace",
+        "--max-lines",
+        "--max-procs",
+        "--max-chars",
+        "--arg-file",
+        "--delimiter",
+        "--eof",
+    },
+    "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
+    "unbuffer": set(),
+    "caffeinate": {"-t", "-w"},
+    "setsid": set(),
+    "chrt": {"-p"},
+}
+WRAPPERS = set(WRAPPER_OPTION_ARGS)
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "ash", "fish"}
+SHELL_OPTION_ARGS = {"-o", "+o", "--rcfile", "--init-file", "-O", "+O"}
+MAX_SHELL_DEPTH = 3
+ROOT_PATHSPECS = {".", "./", ":/", ":(top)", "*", ":", "./*", "../", ".."}
+SUBSTITUTION_RE = re.compile(r"\$\(|`|<\(|__SUBST__")
+SUBST_PLACEHOLDER = "__SUBST__"
+REDIRECT_TOKENS = {"<", ">", ">>", "<<", "<<<", ">&", "<&", "&>", "&>>", ">|"}
 ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 HEREDOC_RE = re.compile(r"<<-?\s*(?P<q>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=q)")
 
@@ -182,6 +229,8 @@ class Facts:
     tags_pushed: bool = False
     post: bool = False
     post_reason: str = ""
+    workdir: Path | None = None
+    text_by_substitution: bool = False
 
     @property
     def is_commit(self) -> bool:
@@ -205,6 +254,11 @@ class Parsed:
     @property
     def gated(self) -> bool:
         return any(c.is_commit or c.is_push or c.post for c in self.commands)
+
+    @property
+    def traced(self) -> bool:
+        """True when at least one simple command was recognised as git, gh or glab."""
+        return any(c.kind != "other" for c in self.commands)
 
 
 def split_heredocs(raw: str) -> tuple[str, list[str]]:
@@ -272,6 +326,80 @@ def _mark_newlines(text: str) -> str:
     return "".join(out)
 
 
+def mask_substitutions(text: str) -> str:
+    """Replace command and process substitutions outside single quotes with a placeholder,
+    so ``$( … )``, ``<( … )`` and backticks neither split the command nor pass as text."""
+    out: list[str] = []
+    index = 0
+    length = len(text)
+    in_single = False
+    while index < length:
+        ch = text[index]
+        if in_single:
+            out.append(ch)
+            if ch == "'":
+                in_single = False
+            index += 1
+            continue
+        if ch == "\\" and index + 1 < length:
+            out.append(ch)
+            out.append(text[index + 1])
+            index += 2
+            continue
+        if ch == "'":
+            in_single = True
+            out.append(ch)
+            index += 1
+            continue
+        if ch == "`":
+            end = text.find("`", index + 1)
+            if end == -1:
+                out.append(ch)
+                index += 1
+                continue
+            out.append(SUBST_PLACEHOLDER)
+            index = end + 1
+            continue
+        if text.startswith(("$(", "<(", ">("), index):
+            depth = 0
+            scan = index + 1
+            while scan < length:
+                if text[scan] == "(":
+                    depth += 1
+                elif text[scan] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                scan += 1
+            if scan >= length:
+                out.append(ch)
+                index += 1
+                continue
+            out.append(SUBST_PLACEHOLDER)
+            index = scan + 1
+            continue
+        out.append(ch)
+        index += 1
+    return "".join(out)
+
+
+def _strip_redirections(tokens: list[str]) -> list[str]:
+    """Drop redirection operators, their file operands and a file-descriptor digit before them."""
+    out: list[str] = []
+    skip_next = False
+    for token in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in REDIRECT_TOKENS:
+            if out and out[-1].isdigit() and len(out[-1]) == 1:
+                out.pop()
+            skip_next = token not in (">&", "<&") or True
+            continue
+        out.append(token)
+    return out
+
+
 def tokenize(line: str) -> list[str]:
     lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
@@ -299,20 +427,77 @@ def simple_commands(text: str) -> list[list[str]]:
 
 
 def _strip_wrappers(tokens: list[str]) -> list[str]:
+    """Drop variable assignments and wrapper programs (with their options) from the front."""
     rest = list(tokens)
-    while rest:
+    hops = 0
+    while rest and hops < 8:
         head = rest[0]
-        if ENV_ASSIGN_RE.match(head) or head in WRAPPERS:
+        if ENV_ASSIGN_RE.match(head):
             rest.pop(0)
-            if head == "sudo":
-                while rest and rest[0].startswith("-"):
+            continue
+        name = _basename(head)
+        if name == "command" and len(rest) > 1 and rest[1] in ("-v", "-V"):
+            break
+        if name not in WRAPPERS:
+            break
+        rest.pop(0)
+        hops += 1
+        with_arg = WRAPPER_OPTION_ARGS[name]
+        while rest:
+            token = rest[0]
+            if token == "--":
+                rest.pop(0)
+                break
+            if token.startswith("-") and len(token) > 1:
+                rest.pop(0)
+                if token in with_arg and rest:
                     rest.pop(0)
-            continue
-        if head == "timeout":
-            rest = rest[2:]
-            continue
-        break
+                continue
+            break
+        if name == "timeout" and rest:
+            rest.pop(0)
     return rest
+
+
+def shell_inner(tokens: list[str]) -> str | None:
+    """The command string a shell wrapper or ``eval`` would run, or None."""
+    rest = _strip_wrappers(tokens)
+    if not rest:
+        return None
+    name = _basename(rest[0])
+    if name == "eval":
+        return " ".join(rest[1:]) or None
+    if name not in SHELLS:
+        return None
+    index = 1
+    while index < len(rest):
+        token = rest[index]
+        if token == "--":
+            return None
+        if token in SHELL_OPTION_ARGS:
+            index += 2
+            continue
+        if token.startswith("--"):
+            index += 1
+            continue
+        if token.startswith(("-", "+")) and len(token) > 1:
+            if "c" in token[1:]:
+                return rest[index + 1] if index + 1 < len(rest) else None
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _expand(token_lists: list[list[str]], depth: int = 0) -> list[list[str]]:
+    out: list[list[str]] = []
+    for tokens in token_lists:
+        inner = shell_inner(tokens) if depth < MAX_SHELL_DEPTH else None
+        if inner is None:
+            out.append(tokens)
+        else:
+            out.extend(_expand(simple_commands(inner), depth + 1))
+    return out
 
 
 def _basename(token: str) -> str:
@@ -328,21 +513,40 @@ def _short_flags(token: str) -> str:
 
 def parse(raw: str, cwd: Path | None = None, extra_posting: Iterable[str] = ()) -> Parsed:
     text, heredocs = split_heredocs(raw)
-    commands = [classify(tokens, cwd, extra_posting) for tokens in simple_commands(text)]
+    text = mask_substitutions(text)
+    commands: list[Facts] = []
+    current = cwd
+    for tokens in _expand(simple_commands(text)):
+        stripped = _strip_wrappers(tokens)
+        if stripped and stripped[0] in ("cd", "pushd"):
+            current = _resolve(current, stripped[1]) if len(stripped) > 1 else current
+            commands.append(Facts(tokens=list(tokens)))
+            continue
+        commands.append(classify(tokens, current, extra_posting))
     return Parsed(raw=raw, commands=commands, heredocs=heredocs)
+
+
+def _resolve(base: Path | None, value: str) -> Path | None:
+    if value in ("-", "~", "$HOME") or value.startswith(("$", "~")):
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return (base / path) if base is not None else None
 
 
 def classify(
     tokens: list[str], cwd: Path | None = None, extra_posting: Iterable[str] = ()
 ) -> Facts:
-    facts = Facts(tokens=list(tokens))
-    rest = _strip_wrappers(tokens)
+    facts = Facts(tokens=list(tokens), workdir=cwd)
+    rest = _strip_wrappers(_strip_redirections(tokens))
     if not rest:
         return facts
     program = _basename(rest[0])
     args = rest[1:]
     if program == "git":
-        _classify_git(facts, args, cwd)
+        facts.workdir = _git_workdir(args, cwd)
+        _classify_git(facts, args, facts.workdir)
     elif program == "gh":
         _classify_gh(facts, args)
     elif program == "glab":
@@ -358,6 +562,26 @@ def classify(
         except re.error:
             continue
     return facts
+
+
+def _git_workdir(args: list[str], cwd: Path | None) -> Path | None:
+    """The directory a git command runs in after its global ``-C`` options."""
+    current = cwd
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "-C" and index + 1 < len(args):
+            current = _resolve(current, args[index + 1])
+            index += 2
+            continue
+        if token in GIT_GLOBAL_WITH_ARG:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        break
+    return current
 
 
 def _git_subcommand(args: list[str]) -> tuple[str | None, list[str]]:
@@ -429,11 +653,14 @@ def _parse_add(facts: Facts, rest: list[str]) -> None:
                 update = True
         else:
             pathspecs.append(token)
-    if update and not pathspecs:
+    narrowing = [spec for spec in pathspecs if spec not in ROOT_PATHSPECS]
+    root_like = [spec for spec in pathspecs if spec in ROOT_PATHSPECS]
+    if root_like:
         facts.add_all = True
-    for spec in pathspecs:
-        if spec in (".", "./", ":/", ":(top)", "*", ":", "./*"):
-            facts.add_all = True
+    elif (facts.add_all or update) and narrowing:
+        facts.add_all = False
+    elif update and not pathspecs:
+        facts.add_all = True
 
 
 COMMIT_ARG_LETTERS = set("mFCctoS")
@@ -464,6 +691,12 @@ def _parse_commit(facts: Facts, rest: list[str]) -> None:
                 index += 1
         elif token.startswith("--file="):
             _text_file(facts, token.split("=", 1)[1])
+        elif token == "--trailer":
+            if index < len(rest):
+                facts.texts.append(rest[index])
+                index += 1
+        elif token.startswith("--trailer="):
+            facts.texts.append(token.split("=", 1)[1])
         elif token.startswith("--"):
             if "=" not in token and token in (
                 "--template",
@@ -475,7 +708,6 @@ def _parse_commit(facts: Facts, rest: list[str]) -> None:
                 "--date",
                 "--cleanup",
                 "--gpg-sign",
-                "--trailer",
                 "--pathspec-from-file",
                 "--only",
             ):
@@ -508,6 +740,8 @@ def _parse_commit(facts: Facts, rest: list[str]) -> None:
 def _text_file(facts: Facts, value: str) -> None:
     if value in ("-", "/dev/stdin"):
         facts.text_from_stdin = True
+    elif value.startswith("<(") or SUBST_PLACEHOLDER in value:
+        facts.text_by_substitution = True
     elif value:
         facts.text_files.append(value)
 
@@ -660,7 +894,7 @@ def ref_is_tag(cwd: Path, name: str) -> bool:
         result = subprocess.run(
             ["git", "-C", str(cwd), "show-ref", "--verify", "--quiet", f"refs/tags/{name}"],
             capture_output=True,
-            timeout=5,
+            timeout=3,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -671,7 +905,7 @@ def ref_is_tag(cwd: Path, name: str) -> bool:
 def _git(cwd: Path, *args: str) -> str:
     try:
         result = subprocess.run(
-            ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=5, check=False
+            ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=3, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -783,13 +1017,19 @@ def carried_text(parsed: Parsed, cwd: Path | None) -> str:
     for facts in parsed.commands:
         if not facts.carries_text:
             continue
-        pieces.extend(facts.texts)
+        for piece in facts.texts:
+            pieces.append(piece)
+            if "\\n" in piece:
+                pieces.append(piece.replace("\\n", "\n"))
+            if SUBSTITUTION_RE.search(piece):
+                facts.text_by_substitution = True
         if facts.text_from_stdin:
             stdin_used = True
         for name in facts.text_files:
             path = Path(name)
-            if not path.is_absolute() and cwd is not None:
-                path = cwd / path
+            base = facts.workdir or cwd
+            if not path.is_absolute() and base is not None:
+                path = base / path
             try:
                 if path.is_file() and path.stat().st_size <= MAX_TEXT_FILE_BYTES:
                     pieces.append(path.read_text(encoding="utf-8", errors="replace"))
@@ -799,4 +1039,6 @@ def carried_text(parsed: Parsed, cwd: Path | None) -> str:
         pieces.extend(parsed.heredocs)
     if stdin_used:
         pieces.append(parsed.raw)
+        if "\\n" in parsed.raw:
+            pieces.append(parsed.raw.replace("\\n", "\n"))
     return "\n".join(pieces)

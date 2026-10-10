@@ -9,7 +9,7 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py"],
-            "timeout": 20,
+            "timeout": 30,
             "onFailure": "block",
             "statusMessage": "agentic-sdlc: checking the command against the registry"
           }

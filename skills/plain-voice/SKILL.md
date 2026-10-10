@@ -39,11 +39,11 @@ hook and the CI check.
 | VOICE-7 | No throat clearing | "It is worth noting", "note that", "importantly", "in summary": delete the preface, keep the sentence. |
 | VOICE-8 | Evidence words carry evidence | "Live", "100%", "PASS", "confirmed", "resolved", "on track", "zero data loss" appear only with the evidence that earns them. "Green" is never a status: give the sha, the date and the lane, or the gate. See evidence (EVID-1). |
 | VOICE-9 | Open points stay open | A reviewer's point, or one the decider has not settled: options, who decides, by when. Before a push, list every normative sentence that settles a question and put it to the decider. |
-| VOICE-10 | Misses are reported as misses | Scope cuts and skipped steps go in the headline. No self-blame language, no hedging, no softening. |
-| VOICE-11 | Shared deliverables are technical only | No named individuals, no credit or blame, no political reads, no "ours" and "yours". Name the system and who picks it up. Restate a people finding as a system property. Never attribute a rejected idea to a person. Describe tools by function, not brand; quoted evidence stays verbatim. |
+| VOICE-10 | Misses are reported as misses | Scope cuts and skipped steps go in the headline. No apology language, no hedging, no softening. |
+| VOICE-11 | Shared deliverables are technical only | No named individuals, no credit or blame, no reading of motives, no "ours" and "yours". Name the system and who picks it up. Restate a people finding as a system property. Never attribute a rejected idea to a person. Describe tools by function, not brand; quoted evidence stays verbatim. |
 | VOICE-12 | Verbatim words | The decider's words are used as given. An accepted draft is not polished further. |
-| VOICE-13 | Guide, do not commit the decider | A draft in the decider's name never promises their work. Findings, a suggested order, what good looks like; the team owns the work. |
-| ATTR-1 | No tool attribution in change text | No Co-Authored-By or Signed-off-by trailer naming a tool, no "Generated with" footer, no robot emoji, in commits, pull requests, merge bodies, issues or release notes. The signer is the operator of record for the change. Enforced by the hook and the CI check. |
+| VOICE-13 | Guide, do not commit the decider | A draft in the decider's name never promises their work. Findings, a suggested order, what good looks like; the owner named in the plan carries the work. |
+| ATTR-1 | No tool attribution in change text | No trailer naming a tool, no "Generated with" footer, no robot emoji beside one, in commits, pull requests, merge bodies, issues or release notes. The signer is the operator of record for the change. A role marker such as `Operated-by: agent` is not attribution and passes. Enforced by the hook and the CI check. |
 | ATTR-2 | Strict mode | A repository may refuse any vendor mention in change text. Opt-in through `.agentic-sdlc.json`. |
 
 ## Shapes that work
@@ -60,7 +60,8 @@ hook and the CI check.
 
 ## Change descriptions
 
-The first line is short, imperative and standalone: "Delete the FizzBuzz RPC". The body says
+The first line is short, imperative and standalone: "Delete the FizzBuzz RPC" (the example is
+Google's, from its engineering practices). The body says
 what changes and why, with the context not visible in the diff, and names what it deliberately
 leaves out. Before a pull request exists, tell the decider in a few plain sentences what it
 does, why, and what it leaves out. No ticket keys, incident numbers, infrastructure identifiers,
@@ -74,7 +75,7 @@ Write like that person types in a team channel: plain declaratives, what they sa
 want, by when. Lead with the decision. End when the content ends. Never post, send, comment or
 save the draft: show it and stop. A request that mentions both posting and drafts means drafts.
 
-## Before posting where senior readers are
+## Before posting to a wide audience
 
 Statuses under a day old, no named person's pending action, every third-party claim linkable,
 history cut.

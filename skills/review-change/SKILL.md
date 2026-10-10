@@ -56,7 +56,8 @@ and a decision. Everything else is noise.
 
 ## Approval standard
 
-Approve when the change improves the code and follows the repository's conventions, even if it
+The standard and the disagreement hierarchy below follow Google's engineering practices
+(CC BY 4.0). Approve when the change improves the code and follows the repository's conventions, even if it
 is not how you would have written it. Block only for a defect, a security issue, a lost test, or
 a structure that makes the next change harder. "I'll clean it up later" is a decline: the cleanup
 lands before the merge or as its own tracked item with an owner.

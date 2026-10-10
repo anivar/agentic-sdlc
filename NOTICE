@@ -2,9 +2,13 @@ agentic-sdlc
 Copyright (c) 2026 Anivar Aravind
 Licensed under the MIT License (see LICENSE).
 
-The process skills in skills/ were written for this repository. Their shape and several of
-their mechanics descend from MIT-licensed skills by other authors, read in full before the
-rewrite. Each descended skill names its source under metadata.derived_from in its SKILL.md.
+The process skills in skills/ were rewritten for this repository from MIT-licensed skills by
+other authors, read in full before the rewrite. Each descended skill names its source under
+metadata.derived_from in its SKILL.md, and rules/registry.json notes the rules that paraphrase
+a source. Vocabulary in skills/deep-modules follows John Ousterhout (A Philosophy of Software
+Design) and Michael Feathers (seams). The approval standard, the disagreement hierarchy and
+the change-description example in skills/review-change and skills/plain-voice follow Google's
+engineering practices documentation (https://google.github.io/eng-practices/, CC BY 4.0).
 
   mattpocock/skills          Copyright (c) 2026 Matt Pocock      MIT
     grilling, grill-with-docs, domain-modeling, codebase-design, tdd, to-tickets,

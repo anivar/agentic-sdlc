@@ -6,6 +6,7 @@ agent and the user can look them up in ``rules/registry.json``.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -25,22 +26,15 @@ RULE_IDS = (
     "ASK-1",
     "ASK-2",
     "ASK-3",
+    "TRACE-1",
 )
 
-GATED_HINT = (
-    "git commit",
-    "git push",
-    "gh pr",
-    "gh issue",
-    "gh release",
-    "gh api",
-    "gh repo",
-    "glab mr",
-    "glab issue",
-    "glab release",
-    "glab api",
-    "commit ",
-    "push ",
+GATED_HINT_RE = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)?(?:commit|push|tag)\b"
+    r"|\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:-A\b|--all\b|\.(?:\s|$))"
+    r"|\bgh\s+(?:pr|issue|release|api|repo|label|workflow|run|gist|secret|variable|project)\b"
+    r"|\bglab\s+(?:mr|issue|release|api|repo|label|ci|variable)\b",
+    re.IGNORECASE,
 )
 
 
@@ -64,9 +58,9 @@ class Decision:
 
 
 def looks_gated(command: str) -> bool:
-    """A cheap pre-check used only to fail closed when full analysis crashes."""
-    low = command.lower()
-    return any(hint in low for hint in GATED_HINT)
+    """A cheap textual pre-check: the command mentions a commit, push, bulk add or forge write.
+    Used to fail closed when analysis crashes, and to ask when the parser could not trace one."""
+    return GATED_HINT_RE.search(command) is not None
 
 
 def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None = None) -> Decision:
@@ -118,19 +112,34 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                 "deny", finding.rule, f"{title(finding.rule)}: {finding.name} ({finding.excerpt})"
             )
 
-    if (
-        cfg.scan_staged
-        and any(f.is_commit and not f.dry_run for f in parsed.commands)
-        and cwd is not None
-    ):
-        for finding in staged_secret_findings(cwd, cfg):
-            decision.add(
-                "deny",
-                "SECRET-1",
-                f"{title('SECRET-1')}: {finding.name} at staged line {finding.line}",
-            )
+    if cfg.scan_staged:
+        scanned: set[Path] = set()
+        for facts in parsed.commands:
+            where = facts.workdir or cwd
+            if not (facts.is_commit and not facts.dry_run) or where is None or where in scanned:
+                continue
+            scanned.add(where)
+            for finding in staged_secret_findings(where, cfg):
+                decision.add(
+                    "deny",
+                    "SECRET-1",
+                    f"{title('SECRET-1')}: {finding.name} at staged line {finding.line}",
+                )
+
+    if looks_gated(command) and not parsed.gated and not parsed.traced:
+        decision.add(
+            "ask",
+            "TRACE-1",
+            f"{title('TRACE-1')}: the command mentions a commit, push or forge write that the parser could not trace; confirm it yourself",
+        )
 
     for facts in parsed.commands:
+        if facts.carries_text and facts.text_by_substitution:
+            decision.add(
+                "ask",
+                "ASK-1" if facts.is_commit else "ASK-3",
+                "message text built by a shell substitution is not scanned here; the pull request check covers it",
+            )
         if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
             what = "amend" if facts.amend else "commit"
             decision.add("ask", "ASK-1", f"{title('ASK-1')}: {what} needs your go-ahead")
@@ -160,7 +169,7 @@ def staged_diff(cwd: Path) -> str:
             capture_output=True,
             text=True,
             errors="replace",
-            timeout=15,
+            timeout=5,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -188,7 +197,7 @@ def gitleaks_staged(cwd: Path) -> str | None:
             capture_output=True,
             text=True,
             errors="replace",
-            timeout=30,
+            timeout=10,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):

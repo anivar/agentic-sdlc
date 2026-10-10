@@ -1,6 +1,6 @@
 # Design it twice
 
-The first idea is rarely the best. When the decider wants alternative interfaces for a chosen
+Ousterhout's pattern: the first idea is rarely the best. When the decider wants alternative interfaces for a chosen
 deepening candidate, and has agreed to a fan-out (DESIGN-5), run this pattern.
 
 ## 1. Frame the problem space

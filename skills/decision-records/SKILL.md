@@ -40,7 +40,7 @@ decision qualifies, a research document when a source taught something.
 | DECIDE-1 | A record for a hard-to-reverse, surprising trade-off | All three must hold. Easy to reverse: you will just reverse it. Not surprising: nobody will wonder why. No real alternative: nothing to record. One paragraph is enough. |
 | DECIDE-2 | Glossary terms are opinionated and implementation-free | One term per concept, the others under "avoid", one or two sentences on what it is. No implementation detail, no scratch notes, no specifications. |
 | DECIDE-3 | Knowledge in tables with calibration | Tables with fixed columns, in the repository. Every row's calibration is written: "unverified", never blank. Prose is for the reader who already has the table. |
-| DECIDE-4 | Records carry no names | Systems and roles, never individuals. A change that concerns a person carries no name in its branch, commit or description, and is not filed on its own: fold it into a neutral tidy-up. |
+| DECIDE-4 | Records carry no names | Systems and roles, never individuals. A change that concerns a person carries no name in its branch, commit or description. |
 | DECIDE-5 | One file per topic, never another's file | Check the path before writing. A file not created in this session is not overwritten; a new dated document sits beside the earlier one. |
 | DECIDE-6 | Conflicts with a record are surfaced | "Contradicts record 0007 (event-sourced orders); worth reopening because …" rather than a silent override. |
 
