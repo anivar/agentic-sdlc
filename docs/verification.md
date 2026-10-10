@@ -46,6 +46,14 @@ the hook returns a blocking error instead of an ask, and the expected result for
 row is: the command does not run and the reason appears in the transcript. Whether
 `bypassPermissions` lets that block stand is the open assumption.
 
+## Observed so far
+
+Print mode (`claude -p`), Claude Code 2.1.296, 2026-10-10, all five modes: see the changelog's
+"Verified before release" section. The blocking error held in `bypassPermissions` and `dontAsk`
+for the commit, the secret file, the `--no-verify` commit and the Read tool; the check after the
+commit reported a trailer that landed in auto and `bypassPermissions`. What this procedure still
+adds is the interactive prompt in default, `acceptEdits` and auto, which print mode cannot show.
+
 ## Recording
 
 One line per mode in `CHANGELOG.md` under the release, in the form: mode, date, Claude Code

@@ -102,6 +102,20 @@ def test_secret_file_reads_ask_and_ordinary_reads_do_not(repo: Path):
         assert guard.decide(raw, repo, NO_GITLEAKS).permission == "allow", raw
 
 
+def test_message_file_written_in_the_same_command_is_scanned_from_the_raw_text(repo: Path):
+    raw = (
+        "printf 'Note\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>\\n' > msg.txt "
+        "&& git commit --allow-empty -F msg.txt"
+    )
+    decision = guard.decide(raw, repo, NO_GITLEAKS)
+    assert decision.permission == "deny" and "ATTR-1" in decision.rules, decision.reason
+    missing = guard.decide("git commit -F missing.txt", repo, NO_GITLEAKS)
+    assert missing.permission == "ask" and "does not exist yet" in missing.reason
+    (repo / "m.txt").write_text("Plain message\n", encoding="utf-8")
+    present = guard.decide("git commit -F m.txt", repo, NO_GITLEAKS)
+    assert present.permission == "ask" and "does not exist" not in present.reason
+
+
 def test_file_tool_decisions():
     assert guard.decide_file("Read", ".env").permission == "ask"
     assert guard.decide_file("Read", "/home/u/project/.env.local").rules == ["SECRET-3"]

@@ -154,6 +154,12 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                 "ASK-1" if facts.is_commit else "ASK-3",
                 "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
             )
+        if facts.carries_text and facts.text_file_missing:
+            decision.add(
+                "ask",
+                "ASK-1" if facts.is_commit else "ASK-3",
+                "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
+            )
         if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
             what = "amend" if facts.amend else "commit"
             add("ask", "ASK-1", f"{what} needs your go-ahead")

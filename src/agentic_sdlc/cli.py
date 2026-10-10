@@ -51,6 +51,7 @@ SKIP_DIRS = {
     "dist",
     "build",
 }
+FORBIDDEN_FILE = ".agentic-sdlc-forbidden.txt"
 RULE_ID_RE = re.compile(r"\b([A-Z]{2,}-[0-9]+)\b")
 FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -459,7 +460,7 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
     for rule in registry.rules(root / "rules" / "registry.json"):
         if names and rule["owner"] not in names:
             problems.append(f"{rule['id']}: owner {rule['owner']} has no skill folder")
-    forbidden = load_forbidden(args.forbidden_file)
+    forbidden = load_forbidden(args.forbidden_file, root)
     for path in iter_tree_text(root):
         body = path.read_text(encoding="utf-8", errors="replace")
         for finding in text.attribution_findings(body):
@@ -477,11 +478,14 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
-def load_forbidden(path_value: str | None) -> list[str]:
+def load_forbidden(path_value: str | None, root: Path | None = None) -> list[str]:
+    """Tokens from AGENTIC_SDLC_FORBIDDEN (comma-separated) and from the named file, or from
+    the gitignored list at the repository root when no file is named."""
     tokens: list[str] = []
     env = os.environ.get("AGENTIC_SDLC_FORBIDDEN", "")
     tokens += [t.strip() for t in env.split(",") if t.strip()]
-    candidates = [Path(path_value)] if path_value else [Path(".agentic-sdlc-forbidden.txt")]
+    default = (root or Path(".")) / FORBIDDEN_FILE
+    candidates = [Path(path_value)] if path_value else [default]
     for candidate in candidates:
         if candidate.is_file():
             tokens += [
@@ -493,9 +497,12 @@ def load_forbidden(path_value: str | None) -> list[str]:
 
 
 def iter_tree_text(root: Path) -> list[Path]:
+    """Text files under root, skipping build and cache directories and the forbidden list itself."""
     out: list[Path] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or SKIP_DIRS & set(path.relative_to(root).parts):
+            continue
+        if path.name == FORBIDDEN_FILE:
             continue
         if path.suffix.lower() in TEXT_SUFFIXES | {".json", ".yml", ".yaml", ".py", ".toml"}:
             out.append(path)

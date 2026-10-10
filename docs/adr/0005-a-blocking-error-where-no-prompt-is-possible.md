@@ -26,4 +26,5 @@ in this repository, with the procedure in `docs/verification.md`.
 ## Consequences
 
 `hook.py` reads `permission_mode`. A user in those modes sees the reason and runs the command
-themselves. `docs/verification.md` carries the two modes as the open assumption.
+themselves. Observed on 2026-10-10 in print mode: the block held in both modes (the changelog's
+verification section).

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## 1.0.0 (2026-10-10)
 
 First release. Eleven skills, ninety-five rules in `rules/registry.json`: thirteen enforced by the
 Claude Code hook, four of those by the native git hooks as well; nine by the reusable workflow
@@ -30,10 +30,23 @@ broken guard never blocks reading a file.
   `PreToolUse:Read`, which returned the SECRET-3 ask in 64 ms; each decision was in
   `.git/agentic-sdlc/decisions.jsonl` with `mode: default`. For `git add -A` the agent declined
   from the skill rules before any tool call, so the hook saw nothing (debug logs, not committed).
-- The forced prompt from a PreToolUse `ask` in auto mode is documented by Claude Code (hooks
-  reference, read 2026-10-10), and so is `permission_mode` in the hook input. Observed behaviour
-  in the interactive modes (default, `acceptEdits`, auto, `bypassPermissions`, `dontAsk`): not
-  yet recorded; see `docs/verification.md`.
+- Per permission mode, inside Claude Code 2.1.296 in print mode (`claude -p --plugin-dir`) on
+  2026-10-10, in throwaway repositories with `record.decisions` on, five cases each: a commit,
+  `cat .env`, a commit with `--no-verify`, the Read tool on `.env`, and a commit whose message
+  file is written in the same command and carries a trailer.
+  - default, `acceptEdits`, auto: the hook returned ask for the commit and the Read and deny for
+    `--no-verify`; print mode turns each ask into a refusal, so the prompt itself is not observed
+    in these modes. In auto the trailer commit ran and the check after the commit reported ATTR-1
+    with the amend instruction, which the agent relayed.
+  - `dontAsk`, `bypassPermissions`: the hook returned its blocking error for the commit, the
+    secret file, the `--no-verify` commit and the Read, and none ran (HEAD unchanged). In
+    `bypassPermissions` the trailer commit ran and the check after the commit reported it. The
+    assumption in decision record 0005 holds in print mode.
+  - In `acceptEdits`, auto and `bypassPermissions` the agent declined `cat .env` from its own
+    rules before any tool call, so that cell rests on default and `dontAsk`.
+  - Not observed: the interactive prompt in default, `acceptEdits` and auto; `docs/verification.md`
+    remains the procedure for it. Every decision above is in each repository's
+    `.git/agentic-sdlc/decisions.jsonl` with its mode (not committed).
 
 ### Corrected before release, from an adversarial read on 2026-10-10
 
@@ -85,6 +98,11 @@ broken guard never blocks reading a file.
   skill lists to be cited in its body, so the coverage table's Cited-by column is exact.
 - Codex sidecars for the two skills that publish or configure; the no-op `user-invocable: true`
   lines dropped.
+- The forbidden-token scan read `.agentic-sdlc-forbidden.txt` from the shell's directory and
+  then flagged the list itself; it reads the list from the repository root and skips it.
+- A message file written and used in the same command (`printf '…' > m.txt && git commit -F
+  m.txt`) was not scanned before the commit, found by the per-mode run; the raw command text is
+  scanned when a named message file does not exist yet, and the ask says so.
 
 ### Added after the read
 

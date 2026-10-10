@@ -278,6 +278,7 @@ class Facts:
     post_reason: str = ""
     workdir: Path | None = None
     text_by_substitution: bool = False
+    text_file_missing: bool = False
     no_verify: bool = False
     hooks_path_override: bool = False
     reads_secret_file: list[str] = field(default_factory=list)
@@ -1105,6 +1106,7 @@ def carried_text(parsed: Parsed, cwd: Path | None) -> str:
     already exist, heredoc bodies, and the raw command when a message comes from stdin."""
     pieces: list[str] = []
     stdin_used = False
+    file_missing = False
     for facts in parsed.commands:
         if not facts.carries_text:
             continue
@@ -1124,11 +1126,14 @@ def carried_text(parsed: Parsed, cwd: Path | None) -> str:
             try:
                 if path.is_file() and path.stat().st_size <= MAX_TEXT_FILE_BYTES:
                     pieces.append(path.read_text(encoding="utf-8", errors="replace"))
+                    continue
             except OSError:
-                continue
+                pass
+            facts.text_file_missing = True  # written by this command, or absent: scan the raw text
+            file_missing = True
     if parsed.heredocs and (stdin_used or any(f.carries_text for f in parsed.commands)):
         pieces.extend(parsed.heredocs)
-    if stdin_used:
+    if stdin_used or file_missing:
         pieces.append(parsed.raw)
         if "\\n" in parsed.raw:
             pieces.append(parsed.raw.replace("\\n", "\n"))

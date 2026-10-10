@@ -148,6 +148,17 @@ def test_check_skills_forbidden_tokens(tmp_path: Path, capsys, monkeypatch):
     assert code == 1 and "forbidden token present" in out
 
 
+def test_check_skills_reads_the_root_list_and_never_flags_it(tmp_path: Path, capsys):
+    good = "---\nname: thin-slices\ndescription: ok\nlicense: MIT\n---\n\nSTAGE-1 applies. Mentions Blorptown here.\n"
+    root = make_repo_tree(tmp_path, good)
+    (root / ".agentic-sdlc-forbidden.txt").write_text("# names\nblorptown\n", encoding="utf-8")
+    code = run("check-skills", "--root", str(root))
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "SKILL.md: forbidden token present" in out
+    assert ".agentic-sdlc-forbidden.txt" not in out
+
+
 def test_check_skills_requires_listed_ids_to_be_cited(tmp_path: Path, capsys):
     listed_only = (
         "---\nname: thin-slices\ndescription: ok\nlicense: MIT\nmetadata:\n  rules: STAGE-1 ASK-2\n---\n\n"
