@@ -1,0 +1,89 @@
+# Reusable check for pull request text and secrets. Call it from any repository:
+#
+#   jobs:
+#     conventions:
+#       uses: anivar/agentic-sdlc/.github/workflows/conventions.yml@v1.0.0
+#       with:
+#         strict: true          # refuse any vendor mention, not only attribution (ATTR-2)
+#         ref: v1.0.0           # the agentic-sdlc ref whose checks run; pin it with the uses line
+#
+# It sees the pull request title, body and branch commits. It does not see a merge body
+# typed at squash-merge time; the Claude Code hook covers that side.
+name: conventions
+
+on:
+  workflow_call:
+    inputs:
+      strict:
+        description: Refuse any vendor mention in change text (ATTR-2), not only attribution patterns
+        type: boolean
+        default: false
+      require-signoff:
+        description: Every commit carries a Signed-off-by trailer
+        type: boolean
+        default: false
+      secrets-scan:
+        description: Run gitleaks over the pull request history
+        type: boolean
+        default: true
+      ref:
+        description: The anivar/agentic-sdlc ref whose checks run
+        type: string
+        default: main
+      voice-paths:
+        description: Files or directories to run lint-voice over (VOICE-3 to VOICE-8); empty skips the lint
+        type: string
+        default: ""
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  change-text:
+    name: change-text
+    runs-on: ubuntu-latest
+    env:
+      # When called from another repository the checks come from a second checkout; on this
+      # repository's own pull requests they are already in the first one.
+      TOOL: ${{ inputs.ref != '' && '.agentic-sdlc-tool' || '.' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the checks
+        if: ${{ inputs.ref != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: anivar/agentic-sdlc
+          ref: ${{ inputs.ref }}
+          path: .agentic-sdlc-tool
+          persist-credentials: false
+      - name: Scan title, body and commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STRICT: ${{ inputs.strict && '--strict' || '' }}
+          SIGNOFF: ${{ inputs.require-signoff && '--require-signoff' || '' }}
+        run: |
+          python3 "$TOOL/src/agentic_sdlc/cli.py" check-pr --event "$GITHUB_EVENT_PATH" $STRICT $SIGNOFF
+      - name: Lint the prose the caller named
+        if: ${{ inputs.voice-paths != '' }}
+        env:
+          VOICE_PATHS: ${{ inputs.voice-paths }}
+        run: |
+          python3 "$TOOL/src/agentic_sdlc/cli.py" lint-voice $VOICE_PATHS --fail-on fail
+
+  secrets:
+    name: secrets
+    if: ${{ inputs.secrets-scan != false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

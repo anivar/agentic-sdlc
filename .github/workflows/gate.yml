@@ -1,0 +1,70 @@
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --group dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+      - run: uv run agentic-sdlc validate
+      - run: uv run agentic-sdlc check-skills
+        env:
+          AGENTIC_SDLC_FORBIDDEN: ${{ secrets.AGENTIC_SDLC_FORBIDDEN }}
+      - run: uv run agentic-sdlc lint-voice README.md CHANGELOG.md docs skills --fail-on fail
+      - run: uv run agentic-sdlc coverage --check
+
+  stock-macos-python:
+    name: hook on the stock macOS python3
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: /usr/bin/python3 --version
+      - run: uv run --python /usr/bin/python3 --no-project --with pytest pytest
+
+  plugin:
+    name: plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Validate the plugin and every skill in strict mode
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.296
+          claude plugin validate --strict .
+      - name: Install every skill with the skills CLI into a throwaway home
+        run: |
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          npx -y skills@1.7.2 add ./ --skill '*' -a claude-code -g -y
+          for dir in skills/*/; do
+            name="$(basename "$dir")"
+            test -f "$HOME/.claude/skills/$name/SKILL.md" || { echo "missing $name"; exit 1; }
+          done

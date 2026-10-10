@@ -1,0 +1,54 @@
+[project]
+name = "agentic-sdlc"
+version = "1.0.0"
+description = "Agent skills and non-negotiable checks for a software delivery process run with coding agents: evidence-tagged claims, reviewable slices, a confirmed commit and push, no tool attribution, no key-shaped literals."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Anivar Aravind", email = "ping@anivar.net" }]
+keywords = ["agent-skills", "coding-agents", "sdlc", "code-review", "git-hooks", "claude-code", "cursor", "codex"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/anivar/agentic-sdlc"
+Repository = "https://github.com/anivar/agentic-sdlc"
+Changelog = "https://github.com/anivar/agentic-sdlc/blob/main/CHANGELOG.md"
+
+[project.scripts]
+agentic-sdlc = "agentic_sdlc.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.14"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+extend-exclude = ["skills", "templates", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "W"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-q"

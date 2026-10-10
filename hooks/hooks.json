@@ -1,0 +1,20 @@
+{
+  "description": "Guards git and forge commands run through the Bash tool: refuses tool attribution in change text, bulk staging, force-pushes to protected branches and key-shaped literals in staged changes; asks before every commit, push and post. Rules and their ids live in rules/registry.json.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py"],
+            "timeout": 20,
+            "onFailure": "block",
+            "statusMessage": "agentic-sdlc: checking the command against the registry"
+          }
+        ]
+      }
+    ]
+  }
+}

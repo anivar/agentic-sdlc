@@ -1,0 +1,17 @@
+{
+  "name": "agentic-sdlc",
+  "owner": {
+    "name": "Anivar Aravind",
+    "url": "https://anivar.net"
+  },
+  "description": "Skills and non-negotiable checks for a delivery process run with coding agents.",
+  "plugins": [
+    {
+      "name": "agentic-sdlc",
+      "source": "./",
+      "description": "Process skills plus a PreToolUse hook guarding git and forge commands.",
+      "category": "productivity",
+      "tags": ["sdlc", "code-review", "git", "hooks"]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/anivar/agentic-sdlc/main/schemas/registry.schema.json",
+  "title": "agentic-sdlc rule registry",
+  "description": "The single source of every rule the skills and mechanisms enforce. Ids are stable; a rule is deprecated, never renumbered.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "statement", "mechanisms", "owner", "since", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]+$" },
+          "title": { "type": "string", "minLength": 3, "maxLength": 80 },
+          "statement": {
+            "description": "One normative sentence or two, RFC 2119 words in capitals.",
+            "type": "string",
+            "minLength": 20
+          },
+          "mechanisms": {
+            "description": "hook: the PreToolUse hook decides. ci: the reusable workflow fails the check. ruleset: GitHub refuses the push. skill: text an agent follows; nothing enforces it.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "enum": ["hook", "ci", "ruleset", "skill"] }
+          },
+          "decision": {
+            "description": "For hook rules: what the hook returns when the rule matches.",
+            "type": "string",
+            "enum": ["deny", "ask"]
+          },
+          "owner": {
+            "description": "The skill whose text carries the rule.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "opt_in": { "type": "boolean", "default": false },
+          "since": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "status": { "type": "string", "enum": ["active", "deprecated"] },
+          "replaced_by": { "type": "string", "pattern": "^[A-Z]+-[0-9]+$" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
