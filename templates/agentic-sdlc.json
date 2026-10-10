@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anivar/agentic-sdlc/main/schemas/config.schema.json",
+  "version": 1,
+  "protected_branches": ["main"],
+  "attribution": {
+    "mode": "patterns",
+    "vendors": []
+  },
+  "confirm": {
+    "commit": true,
+    "push": true,
+    "post": true
+  },
+  "stage": {
+    "deny_add_all": true,
+    "deny_commit_all": true
+  },
+  "secrets": {
+    "scan_staged": true,
+    "use_gitleaks": true,
+    "extra_patterns": []
+  },
+  "posting": {
+    "extra_commands": []
+  }
+}
