@@ -8,13 +8,26 @@
       "statement": "Commit messages, pull request titles and bodies, merge bodies, issue text and release notes MUST NOT carry any trailer naming an AI tool or its no-reply address (Co-Authored-By, Signed-off-by, Reviewed-by, Assisted-by and the like), any footer saying the text was generated, written or made with a tool, or the robot emoji beside such a footer. The signer is the operator of record for the change. A trailer that names a role rather than a product, such as Operated-by: agent, is not attribution and is permitted.",
       "mechanisms": [
         "hook",
+        "githook",
         "ci",
         "skill"
       ],
       "decision": "deny",
       "owner": "plain-voice",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Remove the trailer or footer; the sign-off already names who answers for the change.",
+      "examples": {
+        "deny": [
+          "git commit -m \"Fix\" -m \"Co-Authored-By: Claude <noreply@anthropic.com>\"",
+          "git commit -m x --trailer \"Co-authored-by: Copilot <copilot@github.com>\"",
+          "gh pr create --title t --body \"Done. Generated with Claude Code\""
+        ],
+        "ask": [
+          "git commit -m \"Fix the parser\"",
+          "git commit -m \"Add Claude Code plugin manifest\""
+        ]
+      }
     },
     {
       "id": "ATTR-2",
@@ -22,6 +35,7 @@
       "statement": "When a repository sets attribution.mode to strict, the same text MUST NOT mention a listed vendor or product name at all, in any case or spelling.",
       "mechanisms": [
         "hook",
+        "githook",
         "ci",
         "skill"
       ],
@@ -30,7 +44,8 @@
       "opt_in": true,
       "since": "1.0.0",
       "status": "active",
-      "notes": "Off by default so a repository can say which tools it supports in its own history."
+      "notes": "Off by default so a repository can say which tools it supports in its own history.",
+      "fix": "Reword without the vendor name, or switch attribution.mode back to patterns for this repository."
     },
     {
       "id": "STAGE-1",
@@ -43,7 +58,22 @@
       "decision": "deny",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Stage the files by name (git add <path>), check git diff --cached --stat, then commit.",
+      "examples": {
+        "deny": [
+          "git add -A",
+          "git add .",
+          "git add --all",
+          "git commit -am \"x\"",
+          "sh -c 'git add -A'"
+        ],
+        "allow": [
+          "git add src/main.py",
+          "git add -A src/",
+          "git status"
+        ]
+      }
     },
     {
       "id": "PUSH-1",
@@ -51,13 +81,27 @@
       "statement": "A force push (--force, -f, --force-with-lease, --force-if-includes, or a + refspec) to a protected branch MUST NOT be issued from an agent session. A protected branch moves by merged pull request only.",
       "mechanisms": [
         "hook",
+        "githook",
         "ruleset",
         "skill"
       ],
       "decision": "deny",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Push the branch and open a pull request; a protected branch moves by merge.",
+      "examples": {
+        "deny": [
+          "git push --force origin main",
+          "git push -f origin main",
+          "git push origin +main",
+          "git push --delete origin main"
+        ],
+        "ask": [
+          "git push origin feature",
+          "git push --force origin feature"
+        ]
+      }
     },
     {
       "id": "PUSH-2",
@@ -70,7 +114,14 @@
       "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "If the tag must move, expect every tag-triggered workflow to run again and release assets to be rebuilt.",
+      "examples": {
+        "ask": [
+          "git push --force origin refs/tags/v1.0.0",
+          "git push --tags --force"
+        ]
+      }
     },
     {
       "id": "SECRET-1",
@@ -78,13 +129,15 @@
       "statement": "Staged changes MUST NOT contain key-shaped literals: cloud access keys, forge and registry tokens, private key blocks, bearer tokens, or signing secrets, in code, tests, fixtures or documentation samples. Tests generate keys at runtime. The staged scan can be switched off for a repository (secrets.scan_staged).",
       "mechanisms": [
         "hook",
+        "githook",
         "ci",
         "skill"
       ],
       "decision": "deny",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Unstage the file, move the value to the environment or a secret store, and generate test keys at runtime."
     },
     {
       "id": "ASK-1",
@@ -97,7 +150,17 @@
       "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Show the staged change and the message; commit when the user says yes.",
+      "examples": {
+        "ask": [
+          "git commit -m \"Fix the parser\"",
+          "git commit --amend --no-edit"
+        ],
+        "allow": [
+          "git commit --dry-run -m \"x\""
+        ]
+      }
     },
     {
       "id": "ASK-2",
@@ -110,7 +173,17 @@
       "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Say what is pushed and where; push when the user says yes.",
+      "examples": {
+        "ask": [
+          "git push",
+          "git push origin feature"
+        ],
+        "allow": [
+          "git push --dry-run origin feature"
+        ]
+      }
     },
     {
       "id": "ASK-3",
@@ -123,7 +196,23 @@
       "decision": "ask",
       "owner": "cut-tickets",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Show the draft in the conversation; post when the user says yes.",
+      "examples": {
+        "ask": [
+          "gh pr create --title t --body b",
+          "gh issue comment 1 --body hi",
+          "gh pr merge 12 --squash",
+          "gh api -X POST repos/o/r/issues -f title=t",
+          "glab mr create -t t -d d"
+        ],
+        "allow": [
+          "gh pr view 12",
+          "gh pr list",
+          "gh api repos/o/r",
+          "glab mr view 4"
+        ]
+      }
     },
     {
       "id": "VOICE-1",
@@ -1080,7 +1169,85 @@
       "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Run the git, gh or glab command directly so the hook can read it, or confirm this one yourself.",
+      "examples": {
+        "ask": [
+          "some-tool --run \"git commit -m x\""
+        ]
+      }
+    },
+    {
+      "id": "GUARD-1",
+      "title": "Hook bypass flags are refused",
+      "statement": "An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, and git config setting core.hooksPath or include.path are refused.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Run the command without the flag and let the hooks run; if a hook is wrong, fix the hook.",
+      "examples": {
+        "deny": [
+          "git commit --no-verify -m \"x\"",
+          "git commit -n -m \"x\"",
+          "git push --no-verify origin feature",
+          "git -c core.hooksPath=/dev/null commit -m \"x\"",
+          "git config core.hooksPath /tmp/x",
+          "git config --global core.hooksPath /tmp/x"
+        ],
+        "ask": [
+          "git commit -m \"x\""
+        ],
+        "allow": [
+          "git config --get core.hooksPath",
+          "git config user.name Someone"
+        ]
+      }
+    },
+    {
+      "id": "GUARD-2",
+      "title": "The guard's own configuration is changed knowingly",
+      "statement": "An agent's edit to .agentic-sdlc.json, a git hook, .claude/settings.json, .claude/settings.local.json or .pre-commit-config.yaml MUST be confirmed by the user before it is written.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "setup-conventions",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Say what the edit changes in the guard and why; write it when the user says yes."
+    },
+    {
+      "id": "SECRET-3",
+      "title": "Reading a secret file asks",
+      "statement": "Reading, grepping, copying or sending a file that by name holds credentials (.env files, private keys, .netrc, .npmrc, .pypirc, credentials.json, PEM and keystore files) MUST be confirmed by the user before it happens.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Name the variable or the file and its length or hash instead; read the file only when the user says yes.",
+      "examples": {
+        "ask": [
+          "cat .env",
+          "head -c 40 ~/.ssh/id_ed25519",
+          "cp .env.production /tmp/x"
+        ],
+        "allow": [
+          "cat README.md",
+          "head -n 5 src/main.py",
+          "cp .env.example .env.local.example",
+          "cp .env.example .env"
+        ]
+      }
     }
   ],
   "conformance": "The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY in the statements are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in all capitals. A rule whose mechanism lists hook can be switched off for a repository through .agentic-sdlc.json; the statement names the key."

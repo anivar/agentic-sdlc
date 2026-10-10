@@ -16,7 +16,7 @@ metadata:
   version: 1.0.0
   tags: writing, voice, style, change-description, attribution
   derived_from: unslop (cursor/plugins, pstack, MIT) for the pattern catalogue idea; the rules here are the author's own
-  rules: VOICE-1 VOICE-2 VOICE-3 VOICE-4 VOICE-5 VOICE-6 VOICE-7 VOICE-8 VOICE-9 VOICE-10 VOICE-11 VOICE-12 VOICE-13 ATTR-1 ATTR-2
+  rules: VOICE-1 VOICE-2 VOICE-3 VOICE-4 VOICE-5 VOICE-6 VOICE-7 VOICE-8 VOICE-9 VOICE-10 VOICE-11 VOICE-12 VOICE-13 ATTR-1 ATTR-2 EVID-1
 ---
 
 # Plain voice
@@ -86,6 +86,29 @@ history cut.
 file and line; `--fail-on fail` fails the run on the hard ones and only warns on throat clearing
 and evidence words. A line that must quote a banned word carries `voice-lint: skip` in an HTML
 comment.
+
+## Before and after
+
+Before:
+
+```text
+It's worth noting that we've made significant progress — the migration is basically done and
+the new service is robust. There are two things left: the cutover and the docs. That's why I'd
+suggest we schedule the cutover for next week. Let me know if you have any questions!
+```
+
+After:
+
+```text
+The migration cutover is the next step; the docs follow it. Migration code merged on
+2026-10-09 (a1b2c3d), replay tested against last week's production export (Measured:
+0 mismatches over 41,000 rows). Cutover proposed for Tuesday 14 October; the on-call lead
+decides by Friday.
+```
+
+What changed: the decision first (VOICE-1), the evidence under it with its tag (VOICE-8),
+no dash, no counting framing, no causal flourish (VOICE-3, VOICE-4), no banned word, no closing
+offer (VOICE-6, VOICE-5), the open point named with who decides and by when (VOICE-9).
 
 ## Companion skills
 

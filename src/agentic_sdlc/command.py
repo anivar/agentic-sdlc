@@ -95,6 +95,53 @@ GIT_GLOBAL_FLAGS = {
     "--info-path",
 }
 
+HOOK_OVERRIDE_RE = re.compile(
+    r"^(core\.hookspath|include\.path|includeif\.|core\.fsmonitor|alias\.)", re.IGNORECASE
+)
+# Programs whose arguments are files they read, copy or send.
+SECRET_READERS = {
+    "cat",
+    "less",
+    "more",
+    "head",
+    "tail",
+    "bat",
+    "strings",
+    "xxd",
+    "hexdump",
+    "base64",
+    "cp",
+    "scp",
+    "rsync",
+    "curl",
+    "wget",
+    "open",
+    "pbcopy",
+    "xclip",
+    "source",
+    ".",
+}
+# A file that holds credentials by name. Matched on the tail of a path, also after @ (curl -d @.env).
+SECRET_FILE_RE = re.compile(
+    r"(^|[/@])(\.env(\.[\w.-]+)?|\.netrc|\.npmrc|\.pypirc|\.git-credentials"
+    r"|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|credentials(\.json)?|service[-_]?account[\w.-]*\.json"
+    r"|[\w.-]+\.(pem|key|p12|pfx|jks|keystore|kdbx))\*?$"
+)
+COPY_PROGRAMS = {"cp", "scp", "rsync"}
+SECRET_FILE_EXAMPLE_RE = re.compile(r"\.(example|sample|template|dist|md|txt)$", re.IGNORECASE)
+CONFIG_READ_FORMS = {
+    "--get",
+    "--get-all",
+    "--get-regexp",
+    "--unset",
+    "--unset-all",
+    "--list",
+    "-l",
+    "get",
+    "unset",
+    "list",
+}
+
 GH_WRITE: dict[str, set[str]] = {
     "pr": {
         "create",
@@ -231,6 +278,9 @@ class Facts:
     post_reason: str = ""
     workdir: Path | None = None
     text_by_substitution: bool = False
+    no_verify: bool = False
+    hooks_path_override: bool = False
+    reads_secret_file: list[str] = field(default_factory=list)
 
     @property
     def is_commit(self) -> bool:
@@ -546,7 +596,14 @@ def classify(
     args = rest[1:]
     if program == "git":
         facts.workdir = _git_workdir(args, cwd)
+        facts.hooks_path_override = _overrides_hooks(args)
         _classify_git(facts, args, facts.workdir)
+    elif program in SECRET_READERS:
+        facts.kind = "read"
+        operands = [a for a in args if not a.startswith("-")]
+        if program in COPY_PROGRAMS:
+            operands = operands[:-1]  # the last operand is the destination, a write
+        facts.reads_secret_file = [a for a in operands if is_secret_file(a)]
     elif program == "gh":
         _classify_gh(facts, args)
     elif program == "glab":
@@ -564,31 +621,32 @@ def classify(
     return facts
 
 
-def _git_workdir(args: list[str], cwd: Path | None) -> Path | None:
-    """The directory a git command runs in after its global ``-C`` options."""
-    current = cwd
+def is_secret_file(path: str) -> bool:
+    """True when the path names a credential file and is not a published example of one."""
+    return bool(SECRET_FILE_RE.search(path)) and not SECRET_FILE_EXAMPLE_RE.search(path)
+
+
+def _config_sets_hooks(rest: list[str]) -> bool:
+    """True for ``git config [--global] core.hooksPath <value>`` and the other keys that change
+    which hooks run; reading or unsetting the key is not an override."""
+    if any(token in CONFIG_READ_FORMS for token in rest):
+        return False
+    for index, token in enumerate(rest):
+        if HOOK_OVERRIDE_RE.match(token) and index + 1 < len(rest):
+            return True
+    return False
+
+
+def _git_globals(args: list[str]) -> tuple[list[tuple[str, str]], int]:
+    """Global options before the git subcommand as (option, value) pairs, and the index of the
+    subcommand (``len(args)`` when there is none). ``-cKEY=VAL``, ``--git-dir=X`` and the
+    two-token forms come back as pairs; a flag comes back with an empty value."""
+    pairs: list[tuple[str, str]] = []
     index = 0
     while index < len(args):
         token = args[index]
-        if token == "-C" and index + 1 < len(args):
-            current = _resolve(current, args[index + 1])
-            index += 2
-            continue
         if token in GIT_GLOBAL_WITH_ARG:
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        break
-    return current
-
-
-def _git_subcommand(args: list[str]) -> tuple[str | None, list[str]]:
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token in GIT_GLOBAL_WITH_ARG:
+            pairs.append((token, args[index + 1] if index + 1 < len(args) else ""))
             index += 2
             continue
         if (
@@ -596,16 +654,42 @@ def _git_subcommand(args: list[str]) -> tuple[str | None, list[str]]:
             and "=" in token
             and token.split("=", 1)[0] in GIT_GLOBAL_WITH_ARG
         ):
+            option, value = token.split("=", 1)
+            pairs.append((option, value))
             index += 1
             continue
-        if token in GIT_GLOBAL_FLAGS:
+        if token.startswith("-c") and len(token) > 2 and not token.startswith("--"):
+            pairs.append(("-c", token[2:]))
             index += 1
             continue
         if token.startswith("-"):
+            pairs.append((token, ""))
             index += 1
             continue
-        return token, args[index + 1 :]
-    return None, []
+        break
+    return pairs, index
+
+
+def _overrides_hooks(args: list[str]) -> bool:
+    """True when a global -c sets core.hooksPath, include.path or an alias on the command line."""
+    pairs, _ = _git_globals(args)
+    return any(option == "-c" and HOOK_OVERRIDE_RE.match(value) for option, value in pairs)
+
+
+def _git_workdir(args: list[str], cwd: Path | None) -> Path | None:
+    """The directory a git command runs in after its global ``-C`` options."""
+    current = cwd
+    for option, value in _git_globals(args)[0]:
+        if option == "-C" and value:
+            current = _resolve(current, value)
+    return current
+
+
+def _git_subcommand(args: list[str]) -> tuple[str | None, list[str]]:
+    _, index = _git_globals(args)
+    if index >= len(args):
+        return None, []
+    return args[index], args[index + 1 :]
 
 
 def _classify_git(facts: Facts, args: list[str], cwd: Path | None) -> None:
@@ -625,6 +709,9 @@ def _classify_git(facts: Facts, args: list[str], cwd: Path | None) -> None:
     elif sub == "tag":
         facts.kind = "git-tag"
         _parse_tag(facts, rest)
+    elif sub == "config":
+        facts.kind = "git-config"
+        facts.hooks_path_override = facts.hooks_path_override or _config_sets_hooks(rest)
     else:
         facts.kind = "git-other"
 
@@ -677,8 +764,10 @@ def _parse_commit(facts: Facts, rest: list[str]) -> None:
             facts.commit_all = True
         elif token == "--amend":
             facts.amend = True
-        elif token in ("--dry-run", "-n"):
+        elif token == "--dry-run":
             facts.dry_run = True
+        elif token in ("-n", "--no-verify"):
+            facts.no_verify = True
         elif token in ("-m", "--message"):
             if index < len(rest):
                 facts.texts.append(rest[index])
@@ -720,7 +809,7 @@ def _parse_commit(facts: Facts, rest: list[str]) -> None:
                 if letter == "a":
                     facts.commit_all = True
                 elif letter == "n":
-                    facts.dry_run = True
+                    facts.no_verify = True
                 elif letter in COMMIT_ARG_LETTERS:
                     attached = flags[position + 1 :]
                     if attached:
@@ -815,6 +904,8 @@ def _parse_push(facts: Facts, rest: list[str], cwd: Path | None) -> None:
             delete = True
         elif token in ("-n", "--dry-run"):
             facts.dry_run = True
+        elif token == "--no-verify":
+            facts.no_verify = True
         elif token in PUSH_WITH_ARG:
             index += 1
         elif token.startswith("--"):

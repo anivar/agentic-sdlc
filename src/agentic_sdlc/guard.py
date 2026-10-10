@@ -1,7 +1,8 @@
 """The decision: given a command and a working directory, allow, ask or deny.
 
 Precedence is deny over ask over allow. Every reason names the rule ids it rests on so the
-agent and the user can look them up in ``rules/registry.json``.
+agent and the user can look them up in ``rules/registry.json``, and carries the rule's fix
+line when it has one.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,10 +25,13 @@ RULE_IDS = (
     "PUSH-1",
     "PUSH-2",
     "SECRET-1",
+    "SECRET-3",
     "ASK-1",
     "ASK-2",
     "ASK-3",
     "TRACE-1",
+    "GUARD-1",
+    "GUARD-2",
 )
 
 GATED_HINT_RE = re.compile(
@@ -37,6 +42,12 @@ GATED_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Files whose edit changes what the guard does (GUARD-2), matched on the path's tail.
+GUARD_CONFIG_RE = re.compile(
+    r"(^|/)(\.agentic-sdlc\.json|\.pre-commit-config\.yaml|\.claude/settings(\.local)?\.json"
+    r"|\.git/hooks/[^/]+|hooks/hooks\.json)$"
+)
+
 
 @dataclass
 class Decision:
@@ -44,10 +55,13 @@ class Decision:
     rules: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
 
-    def add(self, permission: str, rule: str, reason: str) -> None:
+    def add(self, permission: str, rule: str, reason: str, fix: str = "") -> None:
         if rule not in self.rules:
             self.rules.append(rule)
-        self.reasons.append(f"{rule}: {reason}")
+        line = f"{rule}: {reason}"
+        if fix:
+            line += f". Fix: {fix}"
+        self.reasons.append(line)
         rank = {"allow": 0, "ask": 1, "deny": 2}
         if rank[permission] > rank[self.permission]:
             self.permission = permission
@@ -66,51 +80,55 @@ def looks_gated(command: str) -> bool:
 def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None = None) -> Decision:
     cfg = cfg or config_mod.Config()
     titles = registry.titles()
+    fixes = registry.fixes()
     decision = Decision()
     parsed = command_mod.parse(command, cwd, cfg.extra_posting_commands)
 
-    def title(rule: str) -> str:
-        return titles.get(rule, rule)
+    def add(permission: str, rule: str, reason: str) -> None:
+        decision.add(permission, rule, f"{titles.get(rule, rule)}: {reason}", fixes.get(rule, ""))
 
     for facts in parsed.commands:
         if facts.kind == "git-add" and facts.add_all and cfg.deny_add_all:
-            decision.add(
-                "deny",
-                "STAGE-1",
-                f"{title('STAGE-1')}: stage named paths, then check git diff --cached --stat",
-            )
+            add("deny", "STAGE-1", "stage named paths, then check git diff --cached --stat")
         if facts.is_commit and facts.commit_all and cfg.deny_commit_all:
-            decision.add(
+            add(
                 "deny",
                 "STAGE-1",
-                f"{title('STAGE-1')}: git commit -a stages every tracked change; stage by path instead",
+                "git commit -a stages every tracked change; stage by path instead",
             )
+        if (facts.is_commit or facts.is_push) and facts.no_verify:
+            add("deny", "GUARD-1", "--no-verify skips the repository's hooks")
+        if facts.hooks_path_override:
+            add(
+                "deny", "GUARD-1", "a -c override of hooks, includes or aliases on the command line"
+            )
+        if facts.kind == "read" and facts.reads_secret_file:
+            names = ", ".join(facts.reads_secret_file[:3])
+            add("ask", "SECRET-3", f"{names} holds credentials by name")
         if facts.is_push and not facts.dry_run:
             protected = set(cfg.protected_branches)
             hit = [t for t in facts.targets if t in protected or t == "*"]
             if facts.force and hit:
                 names = ", ".join(sorted(hit))
-                decision.add(
+                add(
                     "deny",
                     "PUSH-1",
-                    f"{title('PUSH-1')}: force push to {names}; a protected branch moves by merged pull request",
+                    f"force push to {names}; a protected branch moves by merged pull request",
                 )
             deleted = [d for d in facts.deletes if d in protected]
             if deleted:
-                decision.add("deny", "PUSH-1", f"{title('PUSH-1')}: deleting {', '.join(deleted)}")
+                add("deny", "PUSH-1", f"deleting {', '.join(deleted)}")
             if facts.force_tags:
-                decision.add(
+                add(
                     "ask",
                     "PUSH-2",
-                    f"{title('PUSH-2')}: every workflow triggered on tag pushes runs again at the moved tag, and release assets may be rebuilt",
+                    "every workflow triggered on tag pushes runs again at the moved tag, and release assets may be rebuilt",
                 )
 
     carried = command_mod.carried_text(parsed, cwd)
     if carried:
         for finding in text.attribution_findings(carried, cfg):
-            decision.add(
-                "deny", finding.rule, f"{title(finding.rule)}: {finding.name} ({finding.excerpt})"
-            )
+            add("deny", finding.rule, f"{finding.name} ({finding.excerpt})")
 
     if cfg.scan_staged:
         scanned: set[Path] = set()
@@ -120,17 +138,13 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                 continue
             scanned.add(where)
             for finding in staged_secret_findings(where, cfg):
-                decision.add(
-                    "deny",
-                    "SECRET-1",
-                    f"{title('SECRET-1')}: {finding.name} at staged line {finding.line}",
-                )
+                add("deny", "SECRET-1", f"{finding.name} at staged line {finding.line}")
 
     if looks_gated(command) and not parsed.gated and not parsed.traced:
-        decision.add(
+        add(
             "ask",
             "TRACE-1",
-            f"{title('TRACE-1')}: the command mentions a commit, push or forge write that the parser could not trace; confirm it yourself",
+            "the command mentions a commit, push or forge write that the parser could not trace; confirm it yourself",
         )
 
     for facts in parsed.commands:
@@ -138,27 +152,53 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             decision.add(
                 "ask",
                 "ASK-1" if facts.is_commit else "ASK-3",
-                "message text built by a shell substitution is not scanned here; the pull request check covers it",
+                "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
             )
         if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
             what = "amend" if facts.amend else "commit"
-            decision.add("ask", "ASK-1", f"{title('ASK-1')}: {what} needs your go-ahead")
+            add("ask", "ASK-1", f"{what} needs your go-ahead")
         if facts.is_push and not facts.dry_run and cfg.confirm_push:
             where = (
                 ", ".join(facts.targets)
                 if facts.targets
                 else ("tags" if facts.tags_pushed else "remote")
             )
-            decision.add("ask", "ASK-2", f"{title('ASK-2')}: push to {where} needs your go-ahead")
+            add("ask", "ASK-2", f"push to {where} needs your go-ahead")
         if facts.post and cfg.confirm_post:
-            decision.add(
-                "ask",
-                "ASK-3",
-                f"{title('ASK-3')}: {facts.post_reason} publishes or changes something on the forge",
-            )
+            add("ask", "ASK-3", f"{facts.post_reason} publishes or changes something on the forge")
 
     if cfg.problems:
         decision.reasons.append("config: " + "; ".join(cfg.problems))
+    return decision
+
+
+def decide_file(
+    tool: str, path: str, cwd: Path | None = None, cfg: config_mod.Config | None = None
+) -> Decision:
+    """Decisions for the file tools: a secret file read (SECRET-3) and an edit of the guard's
+    own configuration (GUARD-2) ask; everything else is allowed."""
+    cfg = cfg or config_mod.Config()
+    titles = registry.titles()
+    fixes = registry.fixes()
+    decision = Decision()
+    if not path:
+        return decision
+    reads = tool in ("Read", "Grep")
+    writes = tool in ("Edit", "Write", "MultiEdit", "NotebookEdit")
+    if reads and command_mod.is_secret_file(path):
+        decision.add(
+            "ask",
+            "SECRET-3",
+            f"{titles.get('SECRET-3', 'SECRET-3')}: {path} holds credentials by name",
+            fixes.get("SECRET-3", ""),
+        )
+    if writes and GUARD_CONFIG_RE.search(path.replace("\\", "/")):
+        decision.add(
+            "ask",
+            "GUARD-2",
+            f"{titles.get('GUARD-2', 'GUARD-2')}: {path} changes what the guard does",
+            fixes.get("GUARD-2", ""),
+        )
     return decision
 
 
@@ -210,3 +250,36 @@ def gitleaks_staged(cwd: Path) -> str | None:
         ]
         return "gitleaks: " + (summary[-1] if summary else "staged secret found")
     return None
+
+
+def head_age_seconds(cwd: Path) -> float | None:
+    """Seconds since the commit at HEAD was made, or None when there is no HEAD."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "log", "-1", "--format=%ct"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0 or not result.stdout.strip().isdigit():
+        return None
+    return max(0.0, time.time() - int(result.stdout.strip()))
+
+
+def head_message(cwd: Path) -> str:
+    """The message of the commit at HEAD, for the check after a commit ran."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "log", "-1", "--format=%B"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout if result.returncode == 0 else ""

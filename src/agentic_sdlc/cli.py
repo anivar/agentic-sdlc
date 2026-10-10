@@ -7,6 +7,10 @@ agentic-sdlc lint-voice README.md docs    the mechanical plain-voice rules
 agentic-sdlc check-skills                 skill frontmatter, rule citations, attribution, forbidden tokens
 agentic-sdlc validate                     the registry and the repository config
 agentic-sdlc coverage [--check]           docs/coverage.md from the registry
+agentic-sdlc hooks install|status|uninstall native git hooks for any agent
+agentic-sdlc log [--last N]               the decisions the hook recorded here
+agentic-sdlc check-mr [--strict]          GitLab CI: title, description and commits of the MR
+agentic-sdlc bench                        how long a decision takes
 """
 
 from __future__ import annotations
@@ -15,8 +19,12 @@ import argparse
 import json
 import os
 import re
+import shutil
+import statistics
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +34,7 @@ if __name__ == "__main__" and str(PACKAGE_DIR) not in sys.path:
 from agentic_sdlc import (  # noqa: E402
     __version__,  # noqa: E402
     guard,
+    record,
     registry,
     text,
 )
@@ -126,6 +135,59 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--root", default=".", help="repository root")
     p.add_argument("--check", action="store_true", help="fail when the file on disk is stale")
     p.set_defaults(func=cmd_coverage)
+
+    p = sub.add_parser(
+        "check-commit-msg", help="git commit-msg hook: refuse attribution in the message file"
+    )
+    p.add_argument("message_file")
+    p.add_argument("--config-dir", default=".", help="directory holding .agentic-sdlc.json")
+    p.set_defaults(func=cmd_check_commit_msg)
+
+    p = sub.add_parser(
+        "check-staged", help="git pre-commit hook: refuse key-shaped literals in the index"
+    )
+    p.add_argument("--config-dir", default=".", help="repository directory")
+    p.set_defaults(func=cmd_check_staged)
+
+    p = sub.add_parser(
+        "check-push",
+        help="git pre-push hook: refuse a non-fast-forward or deleting push to a protected branch (reads the ref lines git passes on stdin)",
+    )
+    p.add_argument("remote_name", nargs="?", default="")
+    p.add_argument("remote_url", nargs="?", default="")
+    p.add_argument("--config-dir", default=".", help="repository directory")
+    p.set_defaults(func=cmd_check_push)
+
+    p = sub.add_parser(
+        "hooks", help="install or remove the native git hooks that call these checks"
+    )
+    p.add_argument("action", choices=["install", "uninstall", "status"])
+    p.add_argument("--dir", default=".", help="repository directory")
+    p.add_argument("--force", action="store_true", help="replace a hook this tool did not write")
+    p.set_defaults(func=cmd_hooks)
+
+    p = sub.add_parser("log", help="print the decisions the hook recorded for this repository")
+    p.add_argument("--dir", default=".", help="repository directory")
+    p.add_argument("--last", type=int, default=20, help="how many recent decisions to print")
+    p.set_defaults(func=cmd_log)
+
+    p = sub.add_parser(
+        "check-mr",
+        help="GitLab CI: scan the merge request title, description and commits (CI_MERGE_REQUEST_* variables)",
+    )
+    p.add_argument("--strict", action="store_true", help="refuse any vendor mention (ATTR-2)")
+    p.add_argument(
+        "--require-signoff",
+        action="store_true",
+        help="every commit carries a Signed-off-by trailer",
+    )
+    p.add_argument("--config-dir", default=".", help="repository directory")
+    p.set_defaults(func=cmd_check_mr)
+
+    p = sub.add_parser("bench", help="time the decision on a set of commands")
+    p.add_argument("--iterations", type=int, default=50)
+    p.add_argument("--cwd", default=".")
+    p.set_defaults(func=cmd_bench)
     return parser
 
 
@@ -199,22 +261,39 @@ def cmd_check_pr(args: argparse.Namespace) -> int:
         ]
     elif number and repo:
         commits = fetch_pr_commits(repo, number)
-    problems = 0
-    for label, content in [("title", title), ("body", body), *commits]:
-        for finding in text.attribution_findings(content, cfg):
-            problems += 1
-            annotate("error", finding.rule, f"{label}: {finding.name}: {finding.excerpt}")
-        if (
-            args.require_signoff
-            and label.startswith("commit")
-            and not re.search(r"^Signed-off-by: .+", content, re.M)
-        ):
-            problems += 1
-            annotate("error", "SIGNOFF", f"{label}: no Signed-off-by trailer")
+    problems = scan_change_texts(
+        [("title", title), ("body", body), *commits], cfg, args.require_signoff, annotate
+    )
     if cfg.problems:
         annotate("warning", "CONFIG", "; ".join(cfg.problems))
     print(f"check-pr: {len(commits)} commit(s), {problems} problem(s)")
     return 1 if problems else 0
+
+
+SIGNOFF_RE = re.compile(r"^Signed-off-by: .+", re.M)
+
+
+def scan_change_texts(
+    items: list[tuple[str, str]],
+    cfg: config_mod.Config,
+    require_signoff: bool,
+    report: Callable[[str, str, str], None],
+) -> int:
+    """Attribution findings over (label, text) pairs, plus the sign-off check on commits.
+    ``report(level, title, message)`` renders one problem; the count comes back."""
+    problems = 0
+    for label, content in items:
+        for finding in text.attribution_findings(content, cfg):
+            problems += 1
+            report("error", finding.rule, f"{label}: {finding.name}: {finding.excerpt}")
+        if require_signoff and label.startswith("commit") and not SIGNOFF_RE.search(content):
+            problems += 1
+            report("error", "SIGNOFF", f"{label}: no Signed-off-by trailer")
+    return problems
+
+
+def plain_report(level: str, title: str, message: str) -> None:
+    print(f"{level.upper()} {title} {message}")
 
 
 def fetch_pr_commits(repo: str, number: int) -> list[tuple[str, str]]:
@@ -354,6 +433,21 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
                 problems.append(f"{folder.name}: cites unknown rule ids {', '.join(unknown)}")
             if not cited:
                 problems.append(f"{folder.name}: cites no registry rule")
+            listed_match = re.search(r"\brules:\s*([A-Z0-9 -]+)", fields.get("metadata", ""))
+            if listed_match:
+                listed = set(listed_match.group(1).split())
+                body_only = sorted(cited - listed)
+                if body_only:
+                    problems.append(
+                        f"{folder.name}: cites {', '.join(body_only)} in the body but not in metadata.rules"
+                    )
+                unknown_listed = sorted(listed - known)
+                if unknown_listed:
+                    problems.append(
+                        f"{folder.name}: metadata.rules names unknown ids {', '.join(unknown_listed)}"
+                    )
+            else:
+                problems.append(f"{folder.name}: metadata.rules missing")
     for rule in registry.rules(root / "rules" / "registry.json"):
         if names and rule["owner"] not in names:
             problems.append(f"{rule['id']}: owner {rule['owner']} has no skill folder")
@@ -361,7 +455,8 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
     for path in iter_tree_text(root):
         body = path.read_text(encoding="utf-8", errors="replace")
         for finding in text.attribution_findings(body):
-            if path.name in ("text.py", "registry.json") or path.parent.name == "tests":
+            parts = set(path.relative_to(root).parts)
+            if path.name in ("text.py", "registry.json") or parts & {"tests", "evals"}:
                 continue
             problems.append(f"{path.relative_to(root)}:{finding.line}: {finding.describe()}")
         for token in forbidden:
@@ -431,22 +526,41 @@ def cmd_validate(args: argparse.Namespace) -> int:
 # coverage ------------------------------------------------------------------------------------
 
 
-def render_coverage(data: dict) -> str:
+def skill_citations(root: Path) -> dict[str, list[str]]:
+    """Rule id to the sorted names of the skills whose SKILL.md cites it."""
+    cited: dict[str, set[str]] = {}
+    skills_dir = root / "skills"
+    if not skills_dir.is_dir():
+        return {}
+    for folder in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+        skill_file = folder / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        for rule_id in set(
+            RULE_ID_RE.findall(skill_file.read_text(encoding="utf-8", errors="replace"))
+        ):
+            cited.setdefault(rule_id, set()).add(folder.name)
+    return {k: sorted(v) for k, v in cited.items()}
+
+
+def render_coverage(data: dict, citations: dict[str, list[str]] | None = None) -> str:
+    citations = citations or {}
     lines = [
         "# Rule coverage",
         "",
         f"Generated from `rules/registry.json` version {data.get('version')} by `agentic-sdlc coverage`. Do not edit by hand.",
         "",
-        "Mechanism: **hook** means the PreToolUse hook decides; **ci** means the reusable workflow fails the check; **ruleset** means the forge refuses the push; **skill** means text an agent follows and nothing enforces.",
+        "Mechanism: **hook** means the PreToolUse hook decides; **githook** means a native git hook (commit-msg, pre-commit, pre-push) refuses it for every agent and every person; **ci** means the reusable workflow fails the check; **ruleset** means the forge refuses the push; **skill** means text an agent follows and nothing enforces.",
         "",
-        "| Id | Rule | Statement | Mechanisms | Hook decision | Owner | Since | Status |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Id | Rule | Statement | Mechanisms | Hook decision | Owner | Cited by | Since | Status |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for rule in data.get("rules", []):
         statement = rule["statement"].replace("|", "\\|")
+        cited_by = ", ".join(citations.get(rule["id"], [])) or "(none)"
         lines.append(
             f"| {rule['id']} | {rule['title']} | {statement} | {', '.join(rule['mechanisms'])} | "
-            f"{rule.get('decision', '')} | {rule['owner']} | {rule['since']} | {rule['status']}"
+            f"{rule.get('decision', '')} | {rule['owner']} | {cited_by} | {rule['since']} | {rule['status']}"
             f"{' (opt-in)' if rule.get('opt_in') else ''} |"
         )
     totals = {}
@@ -454,7 +568,7 @@ def render_coverage(data: dict) -> str:
         for mechanism in rule["mechanisms"]:
             totals[mechanism] = totals.get(mechanism, 0) + 1
     lines += ["", "| Mechanism | Rules |", "|---|---|"]
-    for mechanism in ("hook", "ci", "ruleset", "skill"):
+    for mechanism in ("hook", "githook", "ci", "ruleset", "skill"):
         lines.append(f"| {mechanism} | {totals.get(mechanism, 0)} |")
     lines.append("")
     return "\n".join(lines)
@@ -462,7 +576,9 @@ def render_coverage(data: dict) -> str:
 
 def cmd_coverage(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
-    rendered = render_coverage(registry.load(root / "rules" / "registry.json"))
+    rendered = render_coverage(
+        registry.load(root / "rules" / "registry.json"), skill_citations(root)
+    )
     target = root / "docs" / "coverage.md"
     if args.check:
         current = target.read_text(encoding="utf-8") if target.is_file() else ""
@@ -474,6 +590,248 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(rendered, encoding="utf-8")
     print(f"coverage: wrote {target.relative_to(root)}")
+    return 0
+
+
+# native git hooks ---------------------------------------------------------------------------
+
+HOOK_MARK = "# agentic-sdlc hook"
+HOOK_NAMES = ("commit-msg", "pre-commit", "pre-push")
+ZERO_SHA = "0" * 40
+
+
+def cmd_check_commit_msg(args: argparse.Namespace) -> int:
+    """commit-msg hook: ATTR-1 and ATTR-2 over the message git is about to record."""
+    cfg = config_mod.load(Path(args.config_dir).resolve())
+    body = Path(args.message_file).read_text(encoding="utf-8", errors="replace")
+    message = "\n".join(line for line in body.splitlines() if not line.startswith("#"))
+    findings = text.attribution_findings(message, cfg)
+    for finding in findings:
+        print(f"agentic-sdlc {finding.describe()}")
+    if findings:
+        print(
+            "agentic-sdlc: the commit message carries tool attribution; the signer is the operator of record (ATTR-1)"
+        )
+    return 1 if findings else 0
+
+
+def cmd_check_staged(args: argparse.Namespace) -> int:
+    """pre-commit hook: SECRET-1 over the index."""
+    where = Path(args.config_dir).resolve()
+    cfg = config_mod.load(where)
+    if not cfg.scan_staged:
+        return 0
+    findings = guard.staged_secret_findings(where, cfg)
+    for finding in findings:
+        print(
+            f"agentic-sdlc SECRET-1 {finding.name} at staged line {finding.line} (value withheld)"
+        )
+    return 1 if findings else 0
+
+
+def cmd_check_push(args: argparse.Namespace) -> int:
+    """pre-push hook: PUSH-1 over the ref lines git passes on stdin."""
+    where = Path(args.config_dir).resolve()
+    cfg = config_mod.load(where)
+    protected = set(cfg.protected_branches)
+    problems = 0
+    for line in sys.stdin.read().splitlines():
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        _local_ref, local_sha, remote_ref, remote_sha = parts
+        branch = remote_ref[len("refs/heads/") :] if remote_ref.startswith("refs/heads/") else None
+        if branch is None or branch not in protected:
+            continue
+        if local_sha == ZERO_SHA:
+            print(f"agentic-sdlc PUSH-1: deleting protected branch {branch} is refused")
+            problems += 1
+            continue
+        if remote_sha == ZERO_SHA:
+            continue
+        ancestor = subprocess.run(
+            ["git", "-C", str(where), "merge-base", "--is-ancestor", remote_sha, local_sha],
+            capture_output=True,
+            check=False,
+        )
+        if ancestor.returncode != 0:
+            print(
+                f"agentic-sdlc PUSH-1: push to {branch} is not a fast-forward of {remote_sha[:7]}; a protected branch moves by merged pull request"
+            )
+            problems += 1
+    return 1 if problems else 0
+
+
+def installed_package_dir(git_dir: Path) -> Path:
+    """Where `hooks install` copies this package so the hooks outlive any cache the CLI ran from."""
+    return git_dir / "agentic-sdlc" / "agentic_sdlc"
+
+
+def hook_script(name: str, cli: Path) -> str:
+    call = f'python3 "{cli}"'
+    if name == "commit-msg":
+        body = f'{call} check-commit-msg "$1" --config-dir "$(git rev-parse --show-toplevel)"'
+    elif name == "pre-commit":
+        body = f'{call} check-staged --config-dir "$(git rev-parse --show-toplevel)"'
+    else:
+        body = f'{call} check-push "$@" --config-dir "$(git rev-parse --show-toplevel)"'
+    return (
+        "#!/bin/sh\n"
+        f"{HOOK_MARK}: {name}, written by `agentic-sdlc hooks install`; remove with `agentic-sdlc hooks uninstall`\n"
+        f'if [ ! -f "{cli}" ]; then echo "agentic-sdlc: {cli} is missing; reinstall the hooks or remove this file" >&2; exit 1; fi\n'
+        f"{body}\n"
+    )
+
+
+def _git_path(repo: Path, what: str) -> Path | None:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--git-path", what],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    path = Path(result.stdout.strip())
+    return (path if path.is_absolute() else repo / path).resolve()
+
+
+def hooks_dir(repo: Path) -> Path | None:
+    return _git_path(repo, "hooks")
+
+
+def cmd_hooks(args: argparse.Namespace) -> int:
+    repo = Path(args.dir).resolve()
+    target = hooks_dir(repo)
+    common = config_mod.git_common_dir(repo)
+    if target is None or common is None:
+        print(f"hooks: {repo} is not a git repository")
+        return 1
+    package_copy = installed_package_dir(common)
+    cli = package_copy / "cli.py"
+    if args.action == "status":
+        for name in HOOK_NAMES:
+            path = target / name
+            state = "absent"
+            if path.is_file():
+                state = (
+                    "ours"
+                    if HOOK_MARK in path.read_text(encoding="utf-8", errors="replace")
+                    else "foreign"
+                )
+            print(f"{name}: {state}")
+        print(f"package copy: {'present' if cli.is_file() else 'absent'} ({package_copy})")
+        return 0
+    if args.action == "uninstall":
+        for name in HOOK_NAMES:
+            path = target / name
+            if path.is_file() and HOOK_MARK in path.read_text(encoding="utf-8", errors="replace"):
+                path.unlink()
+                print(f"removed {path}")
+            elif path.is_file():
+                print(f"kept {path}: not written by agentic-sdlc")
+        if package_copy.parent.is_dir():
+            shutil.rmtree(package_copy.parent)
+            print(f"removed {package_copy.parent}")
+        return 0
+    target.mkdir(parents=True, exist_ok=True)
+    for name in HOOK_NAMES:
+        path = target / name
+        ours = path.is_file() and HOOK_MARK in path.read_text(encoding="utf-8", errors="replace")
+        if path.is_file() and not ours and not args.force:
+            print(
+                f"hooks: {path} exists and was not written by agentic-sdlc; pass --force to replace it, or chain it yourself"
+            )
+            return 1
+    source = Path(__file__).resolve().parent
+    if package_copy.exists():
+        shutil.rmtree(package_copy)
+    shutil.copytree(source, package_copy, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    print(f"copied the package to {package_copy}")
+    for name in HOOK_NAMES:
+        path = target / name
+        path.write_text(hook_script(name, cli), encoding="utf-8")
+        path.chmod(0o755)
+        print(f"wrote {path}")
+    return 0
+
+
+# log, check-mr, bench ---------------------------------------------------------------------
+
+
+def cmd_log(args: argparse.Namespace) -> int:
+    repo = Path(args.dir).resolve()
+    cfg = config_mod.load(repo)
+    path = record.record_path(cfg, repo)
+    if path is None or not path.is_file():
+        print(
+            "log: no decisions recorded here; set record.decisions in .agentic-sdlc.json "
+            "or AGENTIC_SDLC_RECORD=1"
+        )
+        return 0
+    for entry in record.read(path, args.last):
+        shadow = " (shadow)" if entry.get("shadow") else ""
+        rules = ", ".join(entry.get("rules", [])) or "-"
+        print(
+            f"{entry.get('ts', '?')}  {entry.get('event', '?'):<11} "
+            f"{entry.get('decision', '?'):<5}{shadow}  {rules}  {entry.get('ms', '?')} ms  "
+            f"{entry.get('command_sha256', '')}"
+        )
+    return 0
+
+
+def cmd_check_mr(args: argparse.Namespace) -> int:
+    """GitLab merge request check from the predefined CI variables and the branch commits."""
+    cfg = config_mod.load(Path(args.config_dir).resolve())
+    if args.strict:
+        cfg.attribution_mode = "strict"
+    title = os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    body = os.environ.get("CI_MERGE_REQUEST_DESCRIPTION", "")
+    base = os.environ.get("CI_MERGE_REQUEST_DIFF_BASE_SHA", "")
+    commits: list[tuple[str, str]] = []
+    if base:
+        result = subprocess.run(
+            ["git", "-C", args.config_dir, "log", "--format=%H%x1f%B%x1e", f"{base}..HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            for block in result.stdout.split("\x1e"):
+                if "\x1f" in block:
+                    sha, message = block.strip("\n").split("\x1f", 1)
+                    commits.append((f"commit {sha[:7]}", message))
+        else:
+            print(f"WARNING could not list commits: {result.stderr.strip()[:200]}")
+    problems = scan_change_texts(
+        [("title", title), ("description", body), *commits],
+        cfg,
+        args.require_signoff,
+        plain_report,
+    )
+    print(f"check-mr: {len(commits)} commit(s), {problems} problem(s)")
+    return 1 if problems else 0
+
+
+BENCH_COMMANDS = (
+    "git status",
+    "git add -A",
+    'git commit -m "Fix the parser"',
+    "sh -c 'git push --force origin main'",
+    'gh pr merge 12 --squash --body "done"',
+)
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).resolve()
+    cfg = config_mod.from_dict({"secrets": {"use_gitleaks": False}})
+    for command in BENCH_COMMANDS:
+        samples = []
+        for _ in range(args.iterations):
+            start = time.perf_counter()
+            guard.decide(command, cwd, cfg)
+            samples.append((time.perf_counter() - start) * 1000)
+        print(f"{statistics.median(samples):7.2f} ms median  {max(samples):7.2f} ms max  {command}")
     return 0
 
 

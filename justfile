@@ -38,6 +38,14 @@ coverage-check:
 plugin:
     claude plugin validate --strict .
 
+# Behavioural cases under evals/, with and without the plugin. Each run is a real model call.
+eval:
+    claude plugin eval . --runs 1
+
+# Install the native git hooks into this checkout.
+hooks:
+    uv run agentic-sdlc hooks install
+
 # Decide a command as the hook would: just guard 'git add -A'
 guard cmd:
     uv run agentic-sdlc guard "{{cmd}}" --cwd .

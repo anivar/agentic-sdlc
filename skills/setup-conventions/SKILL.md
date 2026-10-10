@@ -17,7 +17,7 @@ metadata:
   version: 1.0.0
   tags: setup, conventions, agents-md, tracker, configuration
   derived_from: setup-matt-pocock-skills (mattpocock/skills, MIT) for the explore-confirm-write shape and the tracker templates; the configuration, workflow and ruleset steps are the author's own
-  rules: SETUP-1 SETUP-2 SETUP-3 ASK-1 ASK-3 DECIDE-5 EVID-8
+  rules: SETUP-1 SETUP-2 SETUP-3 ASK-1 ASK-3 DECIDE-5 EVID-8 GUARD-2
 ---
 
 # Set up conventions
@@ -73,7 +73,9 @@ decider after the merge, since it changes the forge's settings.
 
 Say which skills now read from these files, and that re-running the setup is only needed to
 switch trackers or change the mode. Editing `docs/agents/*.md` and `.agentic-sdlc.json` by hand
-is the normal path afterwards.
+is the normal path afterwards. An edit to `.agentic-sdlc.json`, a git hook, `.claude/settings.json`
+or `.pre-commit-config.yaml` changes what the guard does, so it is described and confirmed before it
+is written (GUARD-2).
 
 ## Companion skills
 

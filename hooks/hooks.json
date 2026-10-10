@@ -1,5 +1,5 @@
 {
-  "description": "Guards git and forge commands run through the Bash tool: refuses tool attribution in change text, bulk staging, force-pushes to protected branches and key-shaped literals in staged changes; asks before every commit, push and post. Rules and their ids live in rules/registry.json.",
+  "description": "Guards git and forge commands run through the Bash tool (refuses tool attribution, bulk staging, hook-bypass flags, force-pushes to protected branches and staged secrets; asks before every commit, push and post), asks before a secret file is read and before the guard's own configuration is edited, and checks the commit that just landed. Rules and their ids live in rules/registry.json.",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,10 +8,43 @@
           {
             "type": "command",
             "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py"
+            ],
             "timeout": 30,
             "onFailure": "block",
             "statusMessage": "agentic-sdlc: checking the command against the registry"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py"
+            ],
+            "timeout": 10,
+            "statusMessage": "agentic-sdlc: checking the file against the registry"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/src/agentic_sdlc/hook.py",
+              "--post"
+            ],
+            "timeout": 10,
+            "statusMessage": "agentic-sdlc: checking what the command left behind"
           }
         ]
       }

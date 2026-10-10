@@ -7,6 +7,7 @@ hook that refuses to run because of a typo in its own config would block every c
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,6 +82,10 @@ VENDOR_EMAIL_DOMAINS = [
 ]
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class Config:
     protected_branches: list[str] = field(default_factory=lambda: ["main", "master"])
@@ -95,6 +100,9 @@ class Config:
     use_gitleaks: bool = True
     extra_secret_patterns: list[str] = field(default_factory=list)
     extra_posting_commands: list[str] = field(default_factory=list)
+    record_decisions: bool = False
+    record_shadow: bool = False
+    record_path: str = ""
     source: Path | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -109,6 +117,15 @@ class Config:
     @property
     def strict_vendors(self) -> list[str]:
         return _merge(STRICT_VENDORS, self.vendors)
+
+    @property
+    def shadow(self) -> bool:
+        """Record what the hook would decide and let everything through."""
+        return self.record_shadow or _env_flag("AGENTIC_SDLC_SHADOW")
+
+    @property
+    def recording(self) -> bool:
+        return self.record_decisions or self.shadow or _env_flag("AGENTIC_SDLC_RECORD")
 
 
 def _merge(base: list[str], extra: list[str]) -> list[str]:
@@ -133,6 +150,7 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         "stage",
         "secrets",
         "posting",
+        "record",
     }
     for key in data:
         if key not in known_top:
@@ -191,6 +209,18 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
     else:
         problems.append("secrets must be an object")
 
+    record = data.get("record") or {}
+    if isinstance(record, dict):
+        cfg.record_decisions = _flag(record, "decisions", False, problems, "record")
+        cfg.record_shadow = _flag(record, "shadow", False, problems, "record")
+        path_value = record.get("path", "")
+        if isinstance(path_value, str):
+            cfg.record_path = path_value
+        else:
+            problems.append("record.path must be a string")
+    else:
+        problems.append("record must be an object")
+
     posting = data.get("posting") or {}
     if isinstance(posting, dict):
         extra = posting.get("extra_commands", [])
@@ -232,10 +262,11 @@ def find_config_file(cwd: Path) -> Path | None:
         current = current.parent
 
 
-def git_toplevel(cwd: Path) -> Path | None:
+def _git_line(cwd: Path, *args: str) -> str | None:
+    """The first line git prints for a read-only query, or None when git fails or is absent."""
     try:
         out = subprocess.run(
-            ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            ["git", "-C", str(cwd), *args],
             capture_output=True,
             text=True,
             timeout=5,
@@ -245,8 +276,22 @@ def git_toplevel(cwd: Path) -> Path | None:
         return None
     if out.returncode != 0:
         return None
-    path = out.stdout.strip()
-    return Path(path) if path else None
+    line = out.stdout.strip()
+    return line or None
+
+
+def git_toplevel(cwd: Path) -> Path | None:
+    line = _git_line(cwd, "rev-parse", "--show-toplevel")
+    return Path(line) if line else None
+
+
+def git_common_dir(cwd: Path) -> Path | None:
+    """The common git directory: `.git`, or the main repository's for a worktree."""
+    line = _git_line(cwd, "rev-parse", "--git-common-dir")
+    if not line:
+        return None
+    path = Path(line)
+    return (path if path.is_absolute() else cwd / path).resolve()
 
 
 def load(cwd: Path) -> Config:

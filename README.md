@@ -15,11 +15,16 @@ a mechanism that does not negotiate.
 
 ## This solution
 
-Eleven skills that encode the process as rules an agent follows, and three mechanisms that
+Eleven skills that encode the process as rules an agent follows, and four mechanisms that
 enforce the rules an agent must not be able to talk its way past:
 
-- a **Claude Code hook** on every Bash command that refuses tool attribution, bulk staging, force
-  pushes to protected branches and staged secrets, and asks before every commit, push and post;
+- a **Claude Code hook** on every Bash command that refuses tool attribution, bulk staging,
+  hook-bypass flags, force pushes to protected branches and staged secrets, and asks before every
+  commit, push and post; the same hook asks before a credential file is read or the guard's own
+  configuration is edited through the file tools, and checks the commit that just landed;
+- **native git hooks** (`commit-msg`, `pre-commit`, `pre-push`) that hold the same attribution,
+  secret and protected-branch rules for every other agent and every person, installed with one
+  command or through the pre-commit framework;
 - a **reusable GitHub workflow** that fails a pull request whose title, body or commits carry
   attribution, and runs gitleaks over the history;
 - a **ruleset** for the protected branch: merged pull requests only, signatures, linear history,
@@ -47,6 +52,18 @@ npx skills add anivar/agentic-sdlc -g
 ```
 
 Do not install both ways into Claude Code; the plugin already carries the skills.
+
+**Every agent and every person**, the git hooks, from inside a repository:
+
+```bash
+uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc hooks install
+```
+
+This copies the package under `.git/` and writes `commit-msg` (ATTR-1, ATTR-2), `pre-commit`
+(SECRET-1) and `pre-push` (PUSH-1) into the hooks directory; `hooks status` and `hooks uninstall`
+manage them, and an existing hook this tool did not write is left alone unless `--force` is
+passed. Teams on the pre-commit framework add the repository to `.pre-commit-config.yaml`
+instead; [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) lists the three hook ids.
 
 **The upstream skills.** This set descends from the skills below (see [NOTICE](NOTICE)). Keeping
 both installed gives a prompt about tests or reviews two answers; to keep one set:
@@ -88,14 +105,17 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Rule | What happens | Where |
 |---|---|---|
-| ATTR-1 | any trailer naming a tool, a "Generated with" footer, or the robot emoji beside one, in a commit, pull request, issue or release text: **denied** | hook; CI for pull request title, body and commits |
-| ATTR-2 | any vendor mention in change text when the repository opts into strict mode: **denied** | hook, CI |
+| ATTR-1 | any trailer naming a tool, a "Generated with" footer, or the robot emoji beside one, in a commit, pull request, issue or release text: **denied** | hook, before the command and again on the message at HEAD after a commit ran; git `commit-msg` hook; CI for pull request title, body and commits |
+| ATTR-2 | any vendor mention in change text when the repository opts into strict mode: **denied** | hook, git `commit-msg` hook, CI |
 | STAGE-1 | `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, `git commit -a`: **denied**; `git add -A src/` passes | hook |
-| PUSH-1 | a force push to, or deletion of, a protected branch: **denied** | hook, ruleset |
+| PUSH-1 | a force push to, or deletion of, a protected branch: **denied** | hook, git `pre-push` hook, ruleset |
 | PUSH-2 | a force push of a tag: **asks**, and says that tag-triggered workflows run again | hook |
-| SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus gitleaks when installed) | hook, CI |
-| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. The forced prompt is documented for auto mode; what the other modes do is recorded per mode in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
+| SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus gitleaks when installed) | hook, git `pre-commit` hook, CI |
+| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. The forced prompt is documented for auto mode. In `bypassPermissions` and `dontAsk`, which cannot prompt, the hook returns a blocking error with the reason instead ([ADR 0005](docs/adr/0005-a-blocking-error-where-no-prompt-is-possible.md)); what each mode does is recorded in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
 | TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper): **asks** | hook |
+| GUARD-1 | `--no-verify` or `commit -n`, a `git -c core.hooksPath=…`, `include.path=…` or alias override on the command line, or `git config` setting those keys: **denied** | hook |
+| GUARD-2 | an edit to `.agentic-sdlc.json`, a git hook, `.claude/settings.json`, `.claude/settings.local.json` or `.pre-commit-config.yaml` through the file tools: **asks** | hook, on Edit, Write and MultiEdit |
+| SECRET-3 | reading, grepping, copying or sending a file that holds credentials by name (`.env` files, private keys, `.netrc`, `.npmrc`, `credentials.json`, PEM and keystore files): **asks** | hook, on Bash, Read and Grep |
 | VOICE-3 to VOICE-8 | dashes as punctuation, counting framings, closing offers, banned words in the prose a repository names through `voice-paths`: **fails the check** | CI, when `voice-paths` is set |
 
 The hook reads the command the agent is about to run, parses it (chains, pipes, heredocs,
@@ -103,39 +123,58 @@ message files, shell wrappers such as `sh -c` and `eval`, `git -C` and a leading
 returns one decision with the rule ids and the reason. Precedence is deny over ask over allow.
 Everything else runs without a decision from the hook.
 
+Every refusal and every ask ends with the rule's fix line. With `record.decisions` on, each
+decision is appended to `.git/agentic-sdlc/decisions.jsonl` as a hash of the command, the
+decision, the rule ids, the permission mode and the milliseconds, never the command text;
+`record.shadow` records and lets everything through, which is how a team sees what the hook
+would refuse before it refuses anything. `agentic-sdlc log` prints the record.
+
 What a refusal looks like:
 
 ```
 $ agentic-sdlc guard 'git add -A'
 deny: STAGE-1
-  STAGE-1: Stage by path: stage named paths, then check git diff --cached --stat
+  STAGE-1: Stage by path: stage named paths, then check git diff --cached --stat. Fix: Stage the files by name (git add <path>), check git diff --cached --stat, then commit.
 
 $ agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 deny: ATTR-1, ASK-1
-  ATTR-1: No tool attribution in change text: tool trailer (Co-Authored-By: Claude <noreply@anthropic.com>)
-  ASK-1: A commit waits for a go-ahead: commit needs your go-ahead
+  ATTR-1: No tool attribution in change text: tool trailer (Co-Authored-By: Claude <noreply@anthropic.com>). Fix: Remove the trailer or footer; the sign-off already names who answers for the change.
+  ASK-1: A commit waits for a go-ahead: commit needs your go-ahead. Fix: Show the staged change and the message; commit when the user says yes.
 
 $ agentic-sdlc guard 'sh -c "git push --force origin main"'
 deny: PUSH-1, ASK-2
-  PUSH-1: No force push to a protected branch: force push to main; a protected branch moves by merged pull request
-  ASK-2: A push waits for a go-ahead: push to main needs your go-ahead
+  PUSH-1: No force push to a protected branch: force push to main; a protected branch moves by merged pull request. Fix: Push the branch and open a pull request; a protected branch moves by merge.
+  ASK-2: A push waits for a go-ahead: push to main needs your go-ahead. Fix: Say what is pushed and where; push when the user says yes.
+
+$ agentic-sdlc guard 'git commit --no-verify -m "Fix parser"'
+deny: GUARD-1, ASK-1
+  GUARD-1: Hook bypass flags are refused: --no-verify skips the repository's hooks. Fix: Run the command without the flag and let the hooks run; if a hook is wrong, fix the hook.
+  ASK-1: A commit waits for a go-ahead: commit needs your go-ahead. Fix: Show the staged change and the message; commit when the user says yes.
+
+$ agentic-sdlc guard 'cat .env'
+ask: SECRET-3
+  SECRET-3: Reading a secret file asks: .env holds credentials by name. Fix: Name the variable or the file and its length or hash instead; read the file only when the user says yes.
 
 $ agentic-sdlc guard 'gh pr merge 12 --squash'
 ask: ASK-3
-  ASK-3: A post waits for a go-ahead: gh pr merge publishes or changes something on the forge
+  ASK-3: A post waits for a go-ahead: gh pr merge publishes or changes something on the forge. Fix: Show the draft in the conversation; post when the user says yes.
 ```
 
 ### What the mechanisms do not cover
 
 | Gap | Why | What covers it |
 |---|---|---|
-| Commands outside the Bash tool: MCP tools that post, `!`-prefixed commands typed by the user, other agents | hooks see Bash tool calls only | the skills' text; the CI check for pull request text |
+| Commands outside the Bash tool: MCP tools that post, `!`-prefixed commands typed by the user, other agents | hooks see Bash tool calls only | the git hooks for commits and pushes made any way at all; the CI check for pull request text |
 | The merge body typed at squash-merge time | the pull request workflow sees title, body and branch commits; the merge body is written after the checks ran | the hook, when the merge runs through the Bash tool with the body inline or in a file that exists; a body built by `$( … )` is not readable before it runs and the hook says so in its ask |
 | Commit-message rules on the forge | GitHub rulesets offer metadata rules on the Enterprise plan only | the required status check from the workflow |
 | A user who sets `disableAllHooks`, or a mod that approves after the hook | the hook is a plugin hook, not a managed one | the CI check; the ruleset |
-| The forced prompt under `acceptEdits` and `bypassPermissions` | the documentation states the auto-mode behaviour only | recorded per mode in [`CHANGELOG.md`](CHANGELOG.md) once observed |
+| Modes that cannot prompt (`bypassPermissions`, `dontAsk`) | an `ask` has nowhere to go there | the hook returns a blocking error with the reason in those modes; the hooks reference states that exit 2 prevents the call and does not qualify it by mode; the observed behaviour per mode is recorded in [`CHANGELOG.md`](CHANGELOG.md) once verified |
+| The forced prompt under `acceptEdits` | the documentation states the auto-mode behaviour only | recorded per mode in [`CHANGELOG.md`](CHANGELOG.md) once observed |
 | A gated command the parser cannot see: a git call inside an interpreter (`python -c`, `node -e`), behind a shell alias or a variable (`$g push`), or a direct API call with `curl` | the parser follows wrappers, substitutions and `cd`, not program semantics | TRACE-1 asks when the text still names the operation; `posting.extra_commands` can name `curl`; the CI check and the ruleset are the backstops |
-| Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; the pull request check scans the resulting commits |
+| Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; after the commit ran, the hook reads the message at HEAD and reports a trailer with the instruction to amend; the pull request check scans the resulting commits |
+| A credential read the parser cannot see: through an interpreter (`python -c 'open(".env")'`), or the whole environment printed (`env`, `printenv`) | SECRET-3 matches file names on the command line and in the file tools, not program semantics | SECRET-2 in the skills (never print a secret); the agent's sandbox |
+| An edit to the guard's own configuration through Bash (`sed -i`, a redirection), or hooks moved through the environment (`GIT_CONFIG_PARAMETERS`) | GUARD-2 watches the file tools; the parser drops redirection targets and environment assignments | the pull request review sees the change; CI and the ruleset do not read the local config |
+| A crash in the hook on the file tools | it carries no `onFailure: block`, by design: a broken guard must not stop every read | the Bash hook keeps `onFailure: block`; the error shows in the transcript |
 
 ## Why no tool attribution
 
@@ -150,6 +189,13 @@ naming a product: a trailer such as `Operated-by: agent` names a role, passes AT
 beside the sign-off that names the person who answers for it. A repository that wants its
 history to carry origination adds that trailer to its commit template; one that does not
 records accountability only, and says so.
+
+## Decisions and vocabulary
+
+The repository keeps its own records the way its skills ask adopters to: a [glossary](GLOSSARY.md)
+with one term per concept, and decision records under [`docs/adr/`](docs/adr/) for the choices
+that are hard to reverse: the standard-library hook, one repository that is also a plugin,
+attribution patterns by default, and accountability rather than origination in the record.
 
 ## Configuration
 
@@ -166,6 +212,7 @@ a default; an absent file means the defaults.
 | `stage.deny_add_all`, `stage.deny_commit_all` | `true` | STAGE-1 |
 | `secrets.scan_staged`, `secrets.use_gitleaks`, `secrets.extra_patterns` | `true`, `true`, `[]` | SECRET-1 |
 | `posting.extra_commands` | `[]`; regular expressions that count as a post | ASK-3 |
+| `record.decisions`, `record.shadow`, `record.path` | `false`, `false`, `<git common dir>/agentic-sdlc/decisions.jsonl`; `AGENTIC_SDLC_RECORD=1` and `AGENTIC_SDLC_SHADOW=1` override for one session | the decision record ([ADR 0006](docs/adr/0006-the-decision-record-holds-a-hash-not-the-command.md)); shadow records and lets every command through |
 
 ## Adopting it in a repository
 
@@ -202,6 +249,12 @@ a default; an absent file means the defaults.
    gh api -X POST repos/<owner>/<repo>/rulesets --input rulesets/main-protected.json
    ```
 
+### GitLab
+
+The plugin, the skills and the git hooks are forge-neutral. For the merge request check,
+`agentic-sdlc check-mr` reads the predefined `CI_MERGE_REQUEST_*` variables and the commits since
+the merge base; [`templates/gitlab-ci.yml`](templates/gitlab-ci.yml) is the job to include.
+
 ## Try the hook by hand
 
 The CLI ships inside the plugin and is not on PyPI; run it from the repository with `uvx`:
@@ -212,6 +265,9 @@ agentic-sdlc guard 'git add -A'
 agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 agentic-sdlc guard 'git push --force origin main'
 agentic-sdlc guard 'gh pr merge 12 --squash --body-file notes.md'
+agentic-sdlc guard 'cat .env'
+agentic-sdlc log            # the decision record, when the repository keeps one
+agentic-sdlc bench          # how long a decision takes
 ```
 
 Each prints the decision, the rule ids and the reason. `--json` prints what the hook returns.
@@ -220,17 +276,20 @@ Each prints the decision, the rule ids and the reason. `--json` prints what the 
 
 ```
 ├── .claude-plugin/        plugin.json, marketplace.json
-├── hooks/hooks.json       the PreToolUse hook on Bash
+├── hooks/hooks.json       the hooks: PreToolUse on Bash and the file tools, PostToolUse on Bash
 ├── src/agentic_sdlc/      command.py (parse), guard.py (decide), text.py (patterns),
-│                          config.py, registry.py, hook.py (adapter), cli.py
+│                          config.py, registry.py, record.py, hook.py (adapter), cli.py
 ├── rules/registry.json    every rule, stable ids, mechanism, owner
 ├── schemas/               config and registry JSON Schemas
 ├── skills/<name>/         SKILL.md and references/ per skill
-├── templates/             what setup-conventions writes into a repository
+├── templates/             what setup-conventions writes into a repository; the GitLab CI job
 ├── rulesets/              the branch ruleset to import
-├── docs/coverage.md       generated from the registry
-├── tests/                 one test per mechanism rule, the hook contract, the CLI
-└── .github/workflows/     gate.yml (this repo), conventions.yml (reusable)
+├── .pre-commit-hooks.yaml the three git hooks for the pre-commit framework
+├── evals/                 behavioural cases for `claude plugin eval`
+├── docs/coverage.md       generated from the registry; docs/adr/ the decision records
+├── GLOSSARY.md            the repository's own vocabulary
+├── tests/                 one test per mechanism rule, the hook contract, the git hooks, the CLI
+└── .github/workflows/     gate.yml (this repo), conventions.yml (reusable), release.yml
 ```
 
 ## Development
@@ -240,10 +299,26 @@ uv sync --group dev
 just check            # ruff, pytest, validate, check-skills, lint-voice, coverage, plugin validate
 just test-stock       # the suite on the stock macOS python3
 just guard 'git add -A'
+just eval             # the behavioural cases under evals/, with and without the plugin (real model runs)
 ```
 
 CI runs the suite on Python 3.9 and 3.14 and on the stock macOS interpreter, validates the plugin
-in strict mode, and installs every skill with the skills CLI into a throwaway home.
+in strict mode, and installs every skill with the skills CLI into a throwaway home. A release is
+created from the CHANGELOG section when a version tag is first pushed; a moved tag does not
+run it again.
+
+## Related projects
+
+Read on 2026-10-10. Each line states what the project's own README says it does, and what
+this repository does differently.
+
+| Project | What it is | Difference here |
+|---|---|---|
+| [random1st/secguard](https://github.com/random1st/secguard) | a command guard with hooks for Claude Code, Gemini CLI and Codex, a telemetry record and a shadow mode | the decision record and shadow mode here follow that rollout pattern; this repository binds its rules to skills, git hooks, CI and the ruleset from one registry, and its Claude Code hook also covers the file tools and the commit that landed |
+| [ThammanaSrinivas/guardrails](https://github.com/ThammanaSrinivas/guardrails) | rules with ids and `gr explain <id>`, a managed pre-commit block, and the statement that shell parsing is a heuristic | the same honesty about parsing, with TRACE-1 asking when a gated operation is named but not traced, and every refusal carrying its fix |
+| [janoppix/silent-code](https://github.com/janoppix/silent-code) | a Claude Code plugin that blocks or strips `Co-Authored-By` trailers and new comments | attribution is refused at three layers here (hook, git hook, CI) and never stripped |
+| [obra/superpowers](https://github.com/obra/superpowers) | a skills library whose hook is a `SessionStart` bootstrap | the skills here cite rule ids that mechanisms enforce; nothing rests on the prompt alone |
+| [mattpocock/skills](https://github.com/mattpocock/skills), [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | the process skills this set descends from (see [NOTICE](NOTICE)) | the rules became a registry with stable ids and enforcement |
 
 ## Ecosystem
 

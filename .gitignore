@@ -9,3 +9,4 @@ build/
 .claude/settings.local.json
 .agentic-sdlc-forbidden.txt
 .DS_Store
+evals/results/

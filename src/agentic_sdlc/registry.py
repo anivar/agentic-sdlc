@@ -18,11 +18,11 @@ REGISTRY_PATH = ROOT / "rules" / "registry.json"
 ID_RE = re.compile(r"^[A-Z]+-[0-9]+$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 OWNER_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-MECHANISMS = {"hook", "ci", "ruleset", "skill"}
+MECHANISMS = {"hook", "githook", "ci", "ruleset", "skill"}
 DECISIONS = {"deny", "ask"}
 STATUSES = {"active", "deprecated"}
 REQUIRED = ("id", "title", "statement", "mechanisms", "owner", "since", "status")
-OPTIONAL = ("decision", "opt_in", "replaced_by", "notes")
+OPTIONAL = ("decision", "opt_in", "replaced_by", "notes", "fix", "examples")
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
@@ -108,6 +108,18 @@ def validate(data: dict[str, Any]) -> list[str]:
             problems.append(f"{where}: replaced_by names an unknown rule")
         if "opt_in" in rule and not isinstance(rule["opt_in"], bool):
             problems.append(f"{where}: opt_in must be boolean")
+        if "fix" in rule and (not isinstance(rule["fix"], str) or len(rule["fix"]) < 10):
+            problems.append(f"{where}: fix must be a sentence")
+        examples = rule.get("examples")
+        if examples is not None:
+            allowed = DECISIONS | {"allow"}
+            if not isinstance(examples, dict) or any(k not in allowed for k in examples):
+                problems.append(f"{where}: examples keys must be deny, ask or allow")
+            elif any(
+                not isinstance(v, list) or not all(isinstance(c, str) for c in v)
+                for v in examples.values()
+            ):
+                problems.append(f"{where}: each examples entry is a list of commands")
     return problems
 
 
@@ -120,6 +132,14 @@ def titles(path: Path | None = None) -> dict[str, str]:
         return dict(FALLBACK_TITLES)
 
 
+def fixes(path: Path | None = None) -> dict[str, str]:
+    """Rule id to the one-line fix the hook appends to a refusal."""
+    try:
+        return {rule["id"]: rule["fix"] for rule in rules(path) if rule.get("fix")}
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
 FALLBACK_TITLES = {
     "ATTR-1": "No tool attribution in change text",
     "ATTR-2": "Strict mode: no vendor mention in change text",
@@ -127,7 +147,11 @@ FALLBACK_TITLES = {
     "PUSH-1": "No force push to a protected branch",
     "PUSH-2": "Moving a tag is confirmed and explained",
     "SECRET-1": "No key-shaped literals",
+    "SECRET-3": "Reading a secret file asks",
     "ASK-1": "A commit waits for a go-ahead",
     "ASK-2": "A push waits for a go-ahead",
     "ASK-3": "A post waits for a go-ahead",
+    "TRACE-1": "An untraceable gated command is confirmed",
+    "GUARD-1": "Hook bypass flags are refused",
+    "GUARD-2": "The guard's own configuration is changed knowingly",
 }

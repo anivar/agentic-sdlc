@@ -18,3 +18,7 @@ Contributions are welcome, however they were produced; a person signs off each c
 
 The maintainer merges. Discussion happens on the pull request; a decision that is hard to reverse
 is recorded under `docs/adr/`.
+
+Releasing: rename the `## x.y.z (unreleased)` heading in `CHANGELOG.md` to `## x.y.z`, commit,
+tag `vx.y.z` (signed) and push the tag. The release workflow writes the GitHub release from that
+section the first time the tag exists; a moved tag does not run it again.

@@ -1,0 +1,16 @@
+# GitLab CI: the attribution check on merge requests (ATTR-1, ATTR-2 when --strict).
+# Paste the job into .gitlab-ci.yml or keep this file and `include:` it. The job reads the
+# predefined CI_MERGE_REQUEST_* variables and the commits since the merge base, so it needs
+# the full history (GIT_DEPTH: 0) and a merge request pipeline.
+conventions:
+  stage: test
+  image: python:3.12
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - pip install --quiet uv
+  script:
+    - uvx --from git+https://github.com/anivar/agentic-sdlc@v1.0.0 agentic-sdlc check-mr --config-dir .
+    # add --strict to refuse any vendor mention, --require-signoff for a Signed-off-by on every commit

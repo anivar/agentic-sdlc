@@ -10,15 +10,17 @@ file is about changing the product.
   `agentic-sdlc check-skills`, `agentic-sdlc lint-voice`, `agentic-sdlc coverage --check` and
   `claude plugin validate --strict .` (TEST-5).
 - Every commit, push and post waits for its own go-ahead (ASK-1, ASK-2, ASK-3). Stage by path
-  (STAGE-1). No tool attribution in commit or pull request text (ATTR-1).
+  (STAGE-1). No tool attribution in commit or pull request text (ATTR-1). Never `--no-verify`
+  (GUARD-1).
 
 ## Rules
 
 1. `rules/registry.json` is the single source of rules. A new rule gets the next id in its
    prefix, a statement with an RFC 2119 word, a mechanism list, an owner skill and `since`. An
    id is never reused or renumbered; a retired rule is marked deprecated with `replaced_by`.
-2. Every rule with `hook` in its mechanisms has a test in `tests/test_guard.py`, and a case in
-   `tests/test_hook.py` when it changes the hook contract.
+2. Every rule with `hook` in its mechanisms carries `examples` in the registry, which
+   `tests/test_operability.py` runs through the guard, and a case in `tests/test_hook.py` or
+   `tests/test_operability.py` when it changes the hook contract.
 3. The hook stays standard-library Python that runs on 3.9. No dependency is added to the
    runtime path. `tests/` run on 3.9 and 3.14 in CI and on the stock macOS interpreter.
 4. `command.py` parses; `guard.py` decides; `text.py` matches; `hook.py` and `cli.py` adapt.

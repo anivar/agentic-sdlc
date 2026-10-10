@@ -22,5 +22,9 @@
   },
   "posting": {
     "extra_commands": []
+  },
+  "record": {
+    "decisions": false,
+    "shadow": false
   }
 }

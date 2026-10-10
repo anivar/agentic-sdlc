@@ -17,7 +17,7 @@ metadata:
   version: 1.0.0
   tags: implementation, git, pull-requests, staging, secrets, incremental
   derived_from: incremental-implementation (addyosmani/agent-skills, MIT) for the slice cycle and scope discipline; the git, secret and go-ahead rules are the author's own
-  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 REVIEW-6 TEST-5
+  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 SECRET-3 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 GUARD-1 REVIEW-6 TEST-5 ATTR-1
 ---
 
 # Thin slices
@@ -72,6 +72,30 @@ The first line is short, imperative and standalone. The body says what changes a
 names what it leaves out. No ticket keys, incident numbers or customer names in code, comments,
 tests or fixtures; they belong in the commit title and the change description. The signer is the
 operator of record: no tool trailer, no generated-with footer (ATTR-1).
+
+## A slice, end to end
+
+1. Plan step P2.3 says: "the search endpoint rejects a page token with 400". One slice.
+2. Failing test first (`test-first`), then the smallest handler change that passes it.
+3. `just check` exits 0. Nothing else in the tree changed (SLICE-3): a stray formatting fix in
+   another file is noted for its own step, not included.
+4. Stage by path: `git add src/search.py tests/test_search.py`; read `git diff --cached --stat`.
+5. Say what it does, why, and what it leaves out: "Rejects a page token with 400 and a
+   `page_token_unsupported` code. Pagination itself is still not implemented; that is P2.4."
+6. On the go-ahead: `git commit -s -m "Reject a page token on search with 400"`. The hook asks
+   (ASK-1), the decider answers, the commit runs. No trailer names a tool (ATTR-1).
+7. On the next go-ahead: `git push`, a pull request with the same three sentences, the review
+   from `review-change`, merge when the checks pass. Then P2.4.
+
+## Hooks and secret files
+
+The repository's hooks run on every commit and push. Never pass `--no-verify` or `commit -n`, and
+never point git at another hooks directory or config, on the command line or through `git config`
+(GUARD-1); when a hook
+is wrong, the fix is a change to the hook in its own slice. A file that holds credentials by name
+(`.env`, a private key, `.netrc`, `.npmrc`, `credentials.json`, a PEM or keystore file) is not
+read, copied or sent without a go-ahead (SECRET-3); name the variable or the file's length or
+hash instead (SECRET-2).
 
 ## Companion skills
 

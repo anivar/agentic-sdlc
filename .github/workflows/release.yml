@@ -1,0 +1,42 @@
+# Creates the GitHub release for a version tag from that version's CHANGELOG section.
+# Runs only when the tag is created: a moved tag (`git push --force` of an existing tag) does not
+# run it again, so a release and its notes are written once.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    if: ${{ github.event.created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Take the CHANGELOG section for this tag
+        id: notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            /^## /       { inside = ($2 == v) ; next }
+            inside && /^## / { exit }
+            inside       { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section headed '## $version'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "agentic-sdlc ${{ steps.notes.outputs.version }}" --notes-file notes.md --verify-tag

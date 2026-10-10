@@ -1,0 +1,32 @@
+# Hooks for the pre-commit framework (https://pre-commit.com). In a consumer's
+# .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/anivar/agentic-sdlc
+#       rev: v1.0.0
+#       hooks:
+#         - id: agentic-sdlc-commit-msg
+#         - id: agentic-sdlc-staged-secrets
+#         - id: agentic-sdlc-pre-push
+#
+# The same rules the Claude Code hook enforces (ATTR-1, ATTR-2, SECRET-1, PUSH-1), for every agent and every person.
+- id: agentic-sdlc-commit-msg
+  name: agentic-sdlc commit message (ATTR-1, ATTR-2)
+  entry: agentic-sdlc check-commit-msg
+  language: python
+  stages: [commit-msg]
+  pass_filenames: true
+- id: agentic-sdlc-staged-secrets
+  name: agentic-sdlc staged secrets (SECRET-1)
+  entry: agentic-sdlc check-staged
+  language: python
+  stages: [pre-commit]
+  pass_filenames: false
+  always_run: true
+- id: agentic-sdlc-pre-push
+  name: agentic-sdlc protected branches (PUSH-1)
+  entry: agentic-sdlc check-push
+  language: python
+  stages: [pre-push]
+  pass_filenames: false
+  always_run: true

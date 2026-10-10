@@ -16,7 +16,7 @@ metadata:
   author_url: https://anivar.net
   version: 1.0.0
   tags: evidence, verification, calibration, provenance, review
-  rules: EVID-1 EVID-2 EVID-3 EVID-4 EVID-5 EVID-6 EVID-7 EVID-8 EVID-9 EVID-10
+  rules: EVID-1 EVID-2 EVID-3 EVID-4 EVID-5 EVID-6 EVID-7 EVID-8 EVID-9 EVID-10 REVIEW-7
 ---
 
 # Evidence
@@ -84,6 +84,18 @@ until the costlier kind is opened.
    claim rests on something not opened this session, which number was recalled, which action
    does damage if the premise is wrong.
 4. After reading a source, write the dated document (EVID-10) before moving on.
+
+## What a tagged paragraph looks like
+
+> The retry loop re-sends non-idempotent requests (Verified: `src/client/send.py:142` at the
+> production sha `3f9c2ab`, from the deployment record of 2026-10-08). It produced 17 duplicate
+> orders last week (Measured: `SELECT count(*) … WHERE created_at > '2026-10-01'` on the
+> production replica, re-computed from the payment provider's export: 17). The cause is the
+> timeout after the server accepted the write (Inferred from the request logs; no direct
+> evidence of the accept). A fix with an idempotency key is in review (Planned).
+
+Four clauses, four tags, one number computed twice (EVID-5), the inference marked as an
+inference rather than upgraded to a finding (EVID-1).
 
 ## Companion skills
 

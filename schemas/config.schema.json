@@ -6,13 +6,24 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-    "version": { "type": "integer", "const": 1 },
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
     "protected_branches": {
       "description": "Branches that only move by merged pull request. A force push to one of them is refused (PUSH-1).",
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
-      "default": ["main", "master"]
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [
+        "main",
+        "master"
+      ]
     },
     "attribution": {
       "type": "object",
@@ -21,13 +32,19 @@
         "mode": {
           "description": "patterns: refuse attribution trailers, footers and the robot emoji that name a tool (ATTR-1). strict: also refuse any mention of a listed vendor in change text (ATTR-2).",
           "type": "string",
-          "enum": ["patterns", "strict"],
+          "enum": [
+            "patterns",
+            "strict"
+          ],
           "default": "patterns"
         },
         "vendors": {
           "description": "Vendor and product names the attribution patterns match, case-insensitive.",
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
@@ -35,29 +52,60 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "commit": { "type": "boolean", "default": true, "description": "Ask before every git commit (ASK-1)." },
-        "push": { "type": "boolean", "default": true, "description": "Ask before every git push (ASK-2)." },
-        "post": { "type": "boolean", "default": true, "description": "Ask before every command that creates or changes something on a forge (ASK-3)." }
+        "commit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before every git commit (ASK-1)."
+        },
+        "push": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before every git push (ASK-2)."
+        },
+        "post": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before every command that creates or changes something on a forge (ASK-3)."
+        }
       }
     },
     "stage": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "deny_add_all": { "type": "boolean", "default": true, "description": "Refuse git add -A, --all and a bare directory (STAGE-1)." },
-        "deny_commit_all": { "type": "boolean", "default": true, "description": "Refuse git commit -a and --all (STAGE-1)." }
+        "deny_add_all": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refuse git add -A, --all and a bare directory (STAGE-1)."
+        },
+        "deny_commit_all": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refuse git commit -a and --all (STAGE-1)."
+        }
       }
     },
     "secrets": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "scan_staged": { "type": "boolean", "default": true, "description": "Scan git diff --cached for key-shaped literals before a commit (SECRET-1)." },
-        "use_gitleaks": { "type": "boolean", "default": true, "description": "Run gitleaks on the staged changes when it is on PATH; the built-in patterns run either way." },
+        "scan_staged": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan git diff --cached for key-shaped literals before a commit (SECRET-1)."
+        },
+        "use_gitleaks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run gitleaks on the staged changes when it is on PATH; the built-in patterns run either way."
+        },
         "extra_patterns": {
           "description": "Additional regular expressions treated as key-shaped literals.",
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "default": []
         }
       }
@@ -69,8 +117,32 @@
         "extra_commands": {
           "description": "Additional regular expressions, matched against each simple command, that count as a post and ask for confirmation (ASK-3).",
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "default": []
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decisions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Append every hook decision to a JSON Lines record under .git/agentic-sdlc/ (command hash, decision, rules, mode, milliseconds; never the command text)."
+        },
+        "shadow": {
+          "type": "boolean",
+          "default": false,
+          "description": "Record what the hook would decide and let every command through. For rolling the hook out over an existing workflow."
+        },
+        "path": {
+          "type": "string",
+          "default": "",
+          "description": "Where the record goes; empty means <git common dir>/agentic-sdlc/decisions.jsonl."
         }
       }
     }
