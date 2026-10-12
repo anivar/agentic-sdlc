@@ -81,7 +81,10 @@ jobs:
 
   secrets:
     name: secrets
-    if: ${{ inputs.secrets-scan != false }}
+    # Runs unless a caller passes secrets-scan: false. On this repository's own pull_request
+    # trigger the input is absent, and a loose `!= false` treats absent as false and skips the
+    # job, which GitHub then reports as a passing required check; toJSON keeps the two apart.
+    if: ${{ toJSON(inputs.secrets-scan) != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

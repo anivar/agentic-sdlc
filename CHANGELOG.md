@@ -17,6 +17,13 @@
 - The `GITLEAKS_LICENSE` workflow secret is no longer used. It stays declared so a caller that
   passes it keeps validating, and goes in 2.0.
 
+### Fixed
+
+- The reusable workflow's `secrets` job never ran on this repository's own pull requests. Its
+  condition compared an input that is absent outside `workflow_call` with `false`, the loose
+  comparison treated absent as false, and the skipped job counted as a passing required check.
+  Callers that pass the input were not affected.
+
 ### Verified before merge
 
 - TruffleHog 3.99.2 over stdin and from a file: a GitHub token, a Slack webhook, an AWS key pair

@@ -245,7 +245,8 @@ a default; an absent file means the defaults.
    leave it out unless the repository wants that. The `secrets` job runs TruffleHog over the
    pull request's commits and fails on a credential that is live or whose check errored; a
    candidate TruffleHog proves dead passes, while the hook, which never verifies, refuses any
-   detector match. No licence is needed.
+   detector match. No licence is needed. A caller that passes `secrets-scan: false` gets a
+   skipped job, which GitHub reports as passing to a required check.
 
 3. Import the ruleset, after editing the required check names to the repository's own:
 
