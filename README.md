@@ -26,7 +26,7 @@ enforce the rules an agent must not be able to talk its way past:
   secret and protected-branch rules for every other agent and every person, installed with one
   command or through the pre-commit framework;
 - a **reusable GitHub workflow** that fails a pull request whose title, body or commits carry
-  attribution, and runs gitleaks over the history;
+  attribution, and runs TruffleHog over the pull request's commits;
 - a **ruleset** for the protected branch: merged pull requests only, signatures, linear history,
   the checks required.
 
@@ -80,7 +80,7 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Component | Needs |
 |---|---|
-| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `gitleaks` optional, used when present. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim. The hook has a 30 s budget; its own git and gitleaks calls stay under it |
+| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `trufflehog` optional, used when present, with verification and the update check off. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim. The hook has a 30 s budget; its own git and TruffleHog calls stay under it |
 | The plugin | Claude Code 2.1.211 or newer for the forced prompt in auto mode; 2.1.295 or newer for `onFailure: block` |
 | The CI check | GitHub Actions; `gh` is preinstalled on the runners |
 | The skills | any agent that reads `SKILL.md` |
@@ -112,7 +112,7 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 | STAGE-1 | `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, `git commit -a`: **denied**; `git add -A src/` passes | hook |
 | PUSH-1 | a force push to, or deletion of, a protected branch: **denied** | hook, git `pre-push` hook, ruleset |
 | PUSH-2 | a force push of a tag: **asks**, and says that tag-triggered workflows run again | hook |
-| SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus gitleaks when installed) | hook, git `pre-commit` hook, CI |
+| SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus TruffleHog's detectors when installed, over the added lines only) | hook, git `pre-commit` hook, CI |
 | ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. The forced prompt is documented for auto mode. In `bypassPermissions` and `dontAsk`, which cannot prompt, the hook returns a blocking error with the reason instead ([ADR 0005](docs/adr/0005-a-blocking-error-where-no-prompt-is-possible.md)); what each mode does is recorded in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
 | TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper): **asks** | hook |
 | GUARD-1 | `--no-verify` or `commit -n`, a `git -c core.hooksPath=…`, `include.path=…` or alias override on the command line, or `git config` setting those keys: **denied** | hook |
@@ -212,7 +212,7 @@ a default; an absent file means the defaults.
 | `attribution.vendors` | adds to the built-in names | ATTR-1, ATTR-2 |
 | `confirm.commit`, `confirm.push`, `confirm.post` | `true` | ASK-1, ASK-2, ASK-3 |
 | `stage.deny_add_all`, `stage.deny_commit_all` | `true` | STAGE-1 |
-| `secrets.scan_staged`, `secrets.use_gitleaks`, `secrets.extra_patterns` | `true`, `true`, `[]` | SECRET-1 |
+| `secrets.scan_staged`, `secrets.scanner`, `secrets.extra_patterns` | `true`, `"trufflehog"` (or `"none"`), `[]`; the 1.0 key `use_gitleaks` still reads, with a warning | SECRET-1 |
 | `posting.extra_commands` | `[]`; regular expressions that count as a post | ASK-3 |
 | `record.decisions`, `record.shadow`, `record.path` | `false`, `false`, `<git common dir>/agentic-sdlc/decisions.jsonl`; `AGENTIC_SDLC_RECORD=1` and `AGENTIC_SDLC_SHADOW=1` override for one session | the decision record ([ADR 0006](docs/adr/0006-the-decision-record-holds-a-hash-not-the-command.md)); shadow records and lets every command through |
 
@@ -242,8 +242,10 @@ a default; an absent file means the defaults.
 
    Pin `ref` to the same tag as the `uses` line. The optional `voice-paths` input (for example
    `"README.md docs"`) also fails the check on the mechanical voice rules over those files;
-   leave it out unless the repository wants that. Organisation accounts pass `GITLEAKS_LICENSE`
-   through `secrets:` for the gitleaks job.
+   leave it out unless the repository wants that. The `secrets` job runs TruffleHog over the
+   pull request's commits and fails on a credential that is live or whose check errored; a
+   candidate TruffleHog proves dead passes, while the hook, which never verifies, refuses any
+   detector match. No licence is needed.
 
 3. Import the ruleset, after editing the required check names to the repository's own:
 

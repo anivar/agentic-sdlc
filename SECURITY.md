@@ -10,8 +10,9 @@ acknowledgement within seven days.
 
 The hook reads the JSON event Claude Code sends for a Bash tool call, parses the command
 string, and may run read-only git commands in the working directory (`rev-parse`,
-`symbolic-ref`, `show-ref`, `diff --cached`, and `log -1` after a commit ran) and
-`gitleaks git --staged` when gitleaks is installed. It reads message files the command names
+`symbolic-ref`, `show-ref`, `diff --cached`, and `log -1` after a commit ran), and pipes the
+lines the staged change adds to `trufflehog stdin --no-verification --no-update` when TruffleHog
+is installed, so the scanner makes no network call. It reads message files the command names
 when they exist. For the file tools (Read, Grep, Edit, Write, MultiEdit, NotebookEdit) it reads
 the path in the event and nothing else. It sends nothing over the network and prints no secret:
 a staged secret is reported by pattern name and line number only, and a credential file is

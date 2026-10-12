@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_NAME = ".agentic-sdlc.json"
+SCANNERS = ("trufflehog", "none")
 
 # Names that identify a tool when they appear inside a trailer, a footer or a sign-off.
 # Wide on purpose: in that position a match is unambiguous.
@@ -97,7 +98,7 @@ class Config:
     deny_add_all: bool = True
     deny_commit_all: bool = True
     scan_staged: bool = True
-    use_gitleaks: bool = True
+    scanner: str = "trufflehog"
     extra_secret_patterns: list[str] = field(default_factory=list)
     extra_posting_commands: list[str] = field(default_factory=list)
     record_decisions: bool = False
@@ -200,7 +201,17 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
     secrets = data.get("secrets") or {}
     if isinstance(secrets, dict):
         cfg.scan_staged = _flag(secrets, "scan_staged", True, problems, "secrets")
-        cfg.use_gitleaks = _flag(secrets, "use_gitleaks", True, problems, "secrets")
+        scanner = secrets.get("scanner", "trufflehog")
+        if scanner in SCANNERS:
+            cfg.scanner = scanner
+        else:
+            problems.append("secrets.scanner must be trufflehog or none")
+        if "use_gitleaks" in secrets:  # the 1.0 key; gitleaks is retired
+            legacy = _flag(secrets, "use_gitleaks", True, problems, "secrets")
+            cfg.scanner = "trufflehog" if legacy else "none"
+            problems.append(
+                "secrets.use_gitleaks is replaced by secrets.scanner (trufflehog or none)"
+            )
         extra = secrets.get("extra_patterns", [])
         if _is_str_list(extra):
             cfg.extra_secret_patterns = list(extra)

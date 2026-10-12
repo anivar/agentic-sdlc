@@ -7,6 +7,7 @@ line when it has one.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -33,6 +34,8 @@ RULE_IDS = (
     "GUARD-1",
     "GUARD-2",
 )
+
+TRUFFLEHOG_FOUND = 183  # TruffleHog's exit code for results with --fail
 
 GATED_HINT_RE = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:commit|push|tag)\b"
@@ -224,22 +227,37 @@ def staged_diff(cwd: Path) -> str:
 
 
 def staged_secret_findings(cwd: Path, cfg: config_mod.Config) -> list[text.Finding]:
-    findings = text.secret_findings(text.added_lines(staged_diff(cwd)), cfg.extra_secret_patterns)
-    if cfg.use_gitleaks and not findings:
-        gitleaks = gitleaks_staged(cwd)
-        if gitleaks:
-            findings.append(text.Finding("SECRET-1", gitleaks, 0, "value withheld"))
+    added = text.added_lines(staged_diff(cwd))
+    findings = text.secret_findings(added, cfg.extra_secret_patterns)
+    if cfg.scanner == "trufflehog" and not findings:
+        external = trufflehog_scan(added)
+        if external:
+            findings.append(text.Finding("SECRET-1", external, 0, "value withheld"))
     return findings
 
 
-def gitleaks_staged(cwd: Path) -> str | None:
-    """A one-line description when gitleaks finds a staged secret; None when clean or absent."""
-    binary = shutil.which("gitleaks")
-    if not binary:
+def trufflehog_scan(added: str) -> str | None:
+    """A one-line description when TruffleHog's detectors match the lines a staged change adds;
+    None when clean or when the binary is absent. Only added lines are scanned, so removing a
+    leaked key is never blocked. The text goes to ``trufflehog stdin`` with verification and the
+    update check off, so the scan makes no network call and a candidate is never tried against
+    a provider from a hook."""
+    binary = shutil.which("trufflehog")
+    if not binary or not added.strip():
         return None
     try:
         result = subprocess.run(
-            [binary, "git", "--staged", "--no-banner", "--redact", "--exit-code", "1", str(cwd)],
+            [
+                binary,
+                "stdin",
+                "--no-verification",
+                "--results=unverified",
+                "--json",
+                "--no-update",
+                "--fail",
+                "--log-level=-1",
+            ],
+            input=added,
             capture_output=True,
             text=True,
             errors="replace",
@@ -248,14 +266,20 @@ def gitleaks_staged(cwd: Path) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    if result.returncode == 1:
-        summary = [
-            line.strip()
-            for line in (result.stderr + result.stdout).splitlines()
-            if "leaks found" in line.lower()
-        ]
-        return "gitleaks: " + (summary[-1] if summary else "staged secret found")
-    return None
+    if result.returncode != TRUFFLEHOG_FOUND:
+        return None
+    detectors: list[str] = []
+    for line in result.stdout.splitlines():
+        if not line.startswith("{"):
+            continue
+        try:
+            name = json.loads(line).get("DetectorName")
+        except ValueError:
+            continue
+        if isinstance(name, str) and name not in detectors:
+            detectors.append(name)
+    named = ", ".join(detectors[:3]) if detectors else "a credential"
+    return f"trufflehog: {named} detected in the staged changes"
 
 
 def head_age_seconds(cwd: Path) -> float | None:

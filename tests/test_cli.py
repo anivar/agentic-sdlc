@@ -15,7 +15,7 @@ def run(*argv: str) -> int:
 
 def test_guard_summary_and_exit_codes(repo: Path, capsys):
     (repo / ".agentic-sdlc.json").write_text(
-        json.dumps({"secrets": {"use_gitleaks": False}}), encoding="utf-8"
+        json.dumps({"secrets": {"scanner": "none"}}), encoding="utf-8"
     )
     assert run("guard", "git add -A", "--cwd", str(repo)) == 1
     out = capsys.readouterr().out
@@ -168,6 +168,18 @@ def test_check_skills_requires_listed_ids_to_be_cited(tmp_path: Path, capsys):
     code = run("check-skills", "--root", str(root))
     out = capsys.readouterr().out
     assert code == 1 and "lists ASK-2 in metadata.rules but never cites" in out
+
+
+def test_config_scanner_key_and_the_retired_gitleaks_alias():
+    from agentic_sdlc import config as config_mod
+
+    assert config_mod.from_dict({}).scanner == "trufflehog"
+    assert config_mod.from_dict({"secrets": {"scanner": "none"}}).scanner == "none"
+    bad = config_mod.from_dict({"secrets": {"scanner": "gitleaks"}})
+    assert bad.scanner == "trufflehog" and any("scanner" in p for p in bad.problems)
+    legacy = config_mod.from_dict({"secrets": {"use_gitleaks": False}})
+    assert legacy.scanner == "none" and any("use_gitleaks" in p for p in legacy.problems)
+    assert config_mod.from_dict({"secrets": {"use_gitleaks": True}}).scanner == "trufflehog"
 
 
 def test_validate_and_coverage_roundtrip(tmp_path: Path, capsys):
