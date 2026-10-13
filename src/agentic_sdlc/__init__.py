@@ -5,4 +5,9 @@ rules in ``rules/registry.json``. The Claude Code hook (``hook.py``) and the CI 
 (``cli.py check-pr``) are thin adapters over the same functions.
 """
 
-__version__ = "1.0.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("agentic-sdlc")
+except PackageNotFoundError:  # running from a source checkout without installation
+    __version__ = "0.0.0+dev"
