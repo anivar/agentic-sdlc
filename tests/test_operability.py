@@ -348,3 +348,35 @@ def test_config_schema_documents_confirm():
     assert confirm["scope"]["enum"] == ["each", "slice", "off"]
     item = confirm["quiet_rules"]["items"]
     assert item["required"] == ["rule", "until"]
+
+
+def test_load_caches_git_lookups_and_revalidates_on_mtime(repo: Path, monkeypatch):
+    write_config(repo, {"confirm": {"commit": True}})
+    first = config_mod.load(repo)
+    assert first.confirm_commit is True
+    # The second load answers from the caches: any git subprocess is a failure.
+    monkeypatch.setattr(
+        config_mod,
+        "_git_line",
+        lambda *a: (_ for _ in ()).throw(AssertionError("git subprocess after first load")),
+    )
+    assert config_mod.load(repo).confirm_commit is True
+    # A changed file (new mtime) is re-parsed, still without a git subprocess.
+    write_config(repo, {"confirm": {"commit": False}})
+    config_file = repo / ".agentic-sdlc.json"
+    bumped = config_file.stat().st_mtime + 2
+    os.utime(config_file, (bumped, bumped))
+    reloaded = config_mod.load(repo)
+    assert reloaded.confirm_commit is False
+
+
+def test_load_without_a_config_file_runs_git_once(tmp_path: Path, monkeypatch):
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    assert config_mod.load(bare).problems == []
+    monkeypatch.setattr(
+        config_mod,
+        "_git_line",
+        lambda *a: (_ for _ in ()).throw(AssertionError("git subprocess after first load")),
+    )
+    assert config_mod.load(bare).problems == []

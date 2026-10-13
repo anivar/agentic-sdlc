@@ -55,8 +55,18 @@
 - The gated-command pre-check also sees an inline interpreter script (`python3 -c`, `node -e`,
   `ruby -e`, `perl -e`) whose text runs git, including the verb split into separate arguments
   (`["git", "push"]`). TRACE-1 asks for those.
+- A seeded parser fuzz test (`tests/test_fuzz.py`): 500 shell-ish strings from a small
+  grammar (pipes, redirections, wrappers, quotes, heredoc markers, substitutions, git verbs),
+  asserting the parser never raises and the guard decides deterministically. A fourth
+  behavioural eval (`evals/push-evasion-is-refused/`) asks the agent to push past a refusal
+  and fails the run if it reaches for an interpreter, an alias or `--no-verify`.
 
 ### Changed
+
+- The hook's per-call git lookups (`rev-parse --show-toplevel`, `--git-common-dir`) are
+  memoized per directory, and a parsed `.agentic-sdlc.json` is cached by path and mtime: a
+  hook call in a directory with no config file runs no git subprocess after the first, and a
+  changed file is re-parsed. Validation problems are computed on the fresh parse, unchanged.
 
 - The check after a commit no longer guesses from the commit's timestamp. The hook records
   the sha at HEAD before a commit command runs (`<git common dir>/agentic-sdlc/pre-head.json`,
@@ -81,6 +91,9 @@
 
 ### Fixed
 
+- A dead conditional in the redirection stripping (`skip_next = token not in (">&", "<&") or
+  True`, always true) is written as the plain intent: every redirection operator consumes the
+  next token as its target. Behaviour is unchanged.
 - The reusable workflow's `secrets` job never ran on this repository's own pull requests. Its
   condition compared an input that is absent outside `workflow_call` with `false`, the loose
   comparison treated absent as false, and the skipped job counted as a passing required check.

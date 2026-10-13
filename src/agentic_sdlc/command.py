@@ -521,7 +521,9 @@ def mask_substitutions(text: str) -> str:
 
 
 def _strip_redirections(tokens: list[str]) -> list[str]:
-    """Drop redirection operators, their file operands and a file-descriptor digit before them."""
+    """Drop redirection operators, their file operands and a file-descriptor digit before them.
+    Every redirection operator, the descriptor forms ``>&`` and ``<&`` included, consumes the
+    next token as its target."""
     out: list[str] = []
     skip_next = False
     for token in tokens:
@@ -531,7 +533,7 @@ def _strip_redirections(tokens: list[str]) -> list[str]:
         if token in REDIRECT_TOKENS:
             if out and out[-1].isdigit() and len(out[-1]) == 1:
                 out.pop()
-            skip_next = token not in (">&", "<&") or True
+            skip_next = True
             continue
         out.append(token)
     return out

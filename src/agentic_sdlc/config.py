@@ -355,25 +355,53 @@ def _git_line(cwd: Path, *args: str) -> str | None:
     return line or None
 
 
+# Per-directory answers to the two git path queries, and parsed configs by (path, mtime).
+# Both are pure per-repository facts; a hook process asks them on every Bash call.
+_TOPLEVEL_CACHE: dict[Path, Path | None] = {}
+_COMMON_DIR_CACHE: dict[Path, Path | None] = {}
+_CONFIG_CACHE: dict[Path, tuple[float, Config]] = {}
+
+
 def git_toplevel(cwd: Path) -> Path | None:
-    line = _git_line(cwd, "rev-parse", "--show-toplevel")
-    return Path(line) if line else None
+    if cwd not in _TOPLEVEL_CACHE:
+        line = _git_line(cwd, "rev-parse", "--show-toplevel")
+        _TOPLEVEL_CACHE[cwd] = Path(line) if line else None
+    return _TOPLEVEL_CACHE[cwd]
 
 
 def git_common_dir(cwd: Path) -> Path | None:
     """The common git directory: `.git`, or the main repository's for a worktree."""
-    line = _git_line(cwd, "rev-parse", "--git-common-dir")
-    if not line:
-        return None
-    path = Path(line)
-    return (path if path.is_absolute() else cwd / path).resolve()
+    if cwd not in _COMMON_DIR_CACHE:
+        line = _git_line(cwd, "rev-parse", "--git-common-dir")
+        path = Path(line) if line else None
+        _COMMON_DIR_CACHE[cwd] = (
+            (path if path.is_absolute() else cwd / path).resolve() if path else None
+        )
+    return _COMMON_DIR_CACHE[cwd]
 
 
 def load(cwd: Path) -> Config:
-    """Config for a working directory: the nearest file, or the defaults."""
+    """Config for a working directory: the nearest file, or the defaults. The parsed Config
+    is cached by the file's path and mtime, so a hook call re-parses only after the file
+    changed; a directory with no config file costs no subprocess after the first lookup."""
     path = find_config_file(cwd)
     if path is None:
         return Config()
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    if mtime is not None:
+        cached = _CONFIG_CACHE.get(path)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+    cfg = _parse_file(path)
+    if mtime is not None:
+        _CONFIG_CACHE[path] = (mtime, cfg)
+    return cfg
+
+
+def _parse_file(path: Path) -> Config:
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
