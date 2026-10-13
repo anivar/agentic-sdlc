@@ -45,7 +45,8 @@ from the registry so the coverage claim is a table, not a sentence.
 or in two steps: `/plugin marketplace add anivar/agentic-sdlc`, then
 `/plugin install agentic-sdlc@agentic-sdlc`. Skills appear as `agentic-sdlc:<name>`.
 
-**Any other agent** (skills only; the hook is Claude Code specific):
+**Any other agent** (skills only; the hook is Claude Code specific, and hook manifests for
+other agents are on the roadmap):
 
 ```bash
 npx skills add anivar/agentic-sdlc -g
@@ -80,10 +81,14 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Component | Needs |
 |---|---|
-| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `trufflehog` optional, used when present, with verification and the update check off. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim. The hook has a 30 s budget; its own git and TruffleHog calls stay under it |
+| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `trufflehog` optional, used when present, with verification and the update check off. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. The hook has a 30 s budget; its own git and TruffleHog calls stay under it |
 | The plugin | Claude Code 2.1.211 or newer for the forced prompt in auto mode; 2.1.295 or newer for `onFailure: block` |
 | The CI check | GitHub Actions; `gh` is preinstalled on the runners |
 | The skills | any agent that reads `SKILL.md` |
+
+A constraint, stated plainly rather than as a footnote: on Windows the hook works only where
+`python3` resolves to a real executable rather than the Store shim, and the CI matrix does
+not run Windows, so Windows behaviour is not verified on every change.
 
 ## What is inside
 
@@ -178,6 +183,7 @@ ask: ASK-3
 | A credential read the parser cannot see: through an interpreter (`python -c 'open(".env")'`), or the whole environment printed (`env`, `printenv`) | SECRET-3 matches file names on the command line and in the file tools, not program semantics | SECRET-2 in the skills (never print a secret); the agent's sandbox |
 | An edit to the guard's own configuration through Bash (`sed -i`, a redirection), or hooks moved through the environment (`GIT_CONFIG_PARAMETERS`) | GUARD-2 watches the file tools; the parser drops redirection targets and environment assignments | the pull request review sees the change; CI and the ruleset do not read the local config |
 | A crash in the hook on the file tools | it carries no `onFailure: block`, by design: a broken guard must not stop every read | the Bash hook keeps `onFailure: block`; the error shows in the transcript |
+| A bulk stage outside the Bash tool (another agent's manifest, a person at a shell) | STAGE-1 lives in the Claude Code hook only; there is no git hook for staging | code review, said plainly: no server-side mechanism refuses a swept-in file |
 | Attribution patterns dodged with look-alike letters or invisible characters | the patterns match ASCII vendor names and trailer keys | each line is normalized before the scan (NFKD, format characters stripped, confusable Cyrillic and Greek mapped to ASCII), and a footer verb followed by any tool-shaped token fires without a known vendor; a script outside the confusable map still evades, and the git hooks and CI scan the same landed text |
 
 ## Why no tool attribution
@@ -258,6 +264,21 @@ a default; an absent file means the defaults.
    ```bash
    gh api -X POST repos/<owner>/<repo>/rulesets --input rulesets/main-protected.json
    ```
+
+   This step is not optional. The ruleset is the only mechanism on the server: it refuses
+   force pushes, deletions and pushes that skip review on main, and it holds the change-text
+   and secrets checks as required, whatever happens on any laptop or in any agent session.
+
+Pin the `uses:` line by commit sha, with the tag in a comment for the reader:
+
+```yaml
+uses: anivar/agentic-sdlc/.github/workflows/conventions.yml@<full commit sha> # v1.0.0
+```
+
+A tag can move and a sha cannot; this repository's own workflows pin their actions the same
+way. Release tags carry an SSH signature: `git tag -v v1.0.0` verifies one, with the
+maintainer's key in `gpg.ssh.allowedSignersFile` (SSH signatures need it; without it git
+cannot say whom the signature belongs to).
 
 ### GitLab
 

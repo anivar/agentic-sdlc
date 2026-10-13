@@ -4,6 +4,19 @@
 
 ### Added
 
+- `GOVERNANCE.md`: the maintenance covenant (a fork needs no permission under the MIT
+  license, `rules/registry.json` is the specification a fork builds against, the decision
+  record is portable JSON Lines), the rule-id lifecycle (an id is never reused or renumbered;
+  retirement is `status: deprecated` with `replaced_by` and a changelog entry naming the ADR),
+  and how a rule change lands (the rule proposal issue template, maintainer review through
+  `.github/CODEOWNERS`, new, over the registry, `guard.py` and the workflows).
+- Adoption documentation: the ruleset import is now a stated mandatory step, the only
+  server-side floor; a supply-chain paragraph shows the reusable workflow pinned by commit
+  sha and the SSH-signed release tags verified with `git tag -v`; the gap table says plainly
+  that code review is the server-side backstop for staging; the other-agent install note
+  names hook manifests for other agents as roadmap; the Windows `python3` shim note is a
+  stated constraint rather than a table aside. `SECURITY.md` now lists the `remote` and
+  `rev-list` reads and the `pre-head.json` state file the hook writes around a commit.
 - Attribution scanning normalizes each line before the patterns run: NFKD, format characters
   (zero-width joiners and spaces, the soft hyphen) stripped, confusable Cyrillic and Greek
   letters mapped to ASCII. `Claude` written with a Cyrillic а, or a trailer key broken up with

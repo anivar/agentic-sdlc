@@ -10,13 +10,19 @@ acknowledgement within seven days.
 
 The hook reads the JSON event Claude Code sends for a Bash tool call, parses the command
 string, and may run read-only git commands in the working directory (`rev-parse`,
-`symbolic-ref`, `show-ref`, `diff --cached`, and `log -1` after a commit ran), and pipes the
+`symbolic-ref`, `show-ref`, `remote`, `rev-list`, `diff --cached`, and `log -1` after a
+commit ran), and pipes the
 lines the staged change adds to `trufflehog stdin --no-verification --no-update` when TruffleHog
 is installed, so the scanner makes no network call. It reads message files the command names
 when they exist. For the file tools (Read, Grep, Edit, Write, MultiEdit, NotebookEdit) it reads
 the path in the event and nothing else. It sends nothing over the network and prints no secret:
 a staged secret is reported by pattern name and line number only, and a credential file is
 named, never read.
+
+Before a commit command runs, the hook records the sha at HEAD in
+`<git common dir>/agentic-sdlc/pre-head.json` (a null for an unborn HEAD) and deletes the
+file after the command, so the check after a commit can tell whether HEAD moved. That is the
+only write apart from the decision record.
 
 It writes nothing unless the repository turns the decision record on (`record.decisions` or
 `record.shadow` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_RECORD=1` / `AGENTIC_SDLC_SHADOW=1`
