@@ -4,6 +4,16 @@
 
 ### Added
 
+- The friction dial: `confirm.scope` (`"each"`, the default; `"slice"` asks for a commit only
+  when it would be the branch's first unpushed commit, checked with
+  `git rev-list HEAD --not --remotes --count` and failing closed to an ask when git cannot say
+  or no remote exists; `"off"` switches all three confirms off) and `confirm.quiet_rules`
+  (entries `{rule, until}` that silence a named ask rule until a UTC date). A quiet rule
+  naming a deny rule is a config error, an expired entry warns in the config problems, and a
+  suppressed ask is noted in the decision reason so the record keeps it visible. The
+  unrecognized-subcommand ask from the verb tables is not affected by the scope.
+- `agentic-sdlc log --summary` aggregates the decision record: counts by decision, asks and
+  denies per rule, the top ten command kinds, and the dates covered.
 - A `gh` or `glab` subcommand the verb tables know as neither write nor read now asks
   (ASK-3, "review it yourself") instead of passing silently; the ask does not depend on
   `confirm.post`, like TRACE-1. The tables were re-grounded against gh 2.102.0 and

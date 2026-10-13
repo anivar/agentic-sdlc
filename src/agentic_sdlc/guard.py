@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import command as command_mod
@@ -121,8 +122,20 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
     fixes = registry.fixes()
     decision = Decision()
     parsed = command_mod.parse(command, cwd, cfg.extra_posting_commands)
+    today = datetime.now(timezone.utc).date()
+    quiet = {q["rule"]: q["until"] for q in cfg.quiet_rules if q["until"] >= today}
+
+    def quiet_note(rule: str) -> bool:
+        """True when a quiet rule covers this ask; the suppression is noted for the record."""
+        until = quiet.get(rule)
+        if until is None:
+            return False
+        decision.reasons.append(f"{rule}: suppressed by confirm.quiet_rules until {until}")
+        return True
 
     def add(permission: str, rule: str, reason: str) -> None:
+        if permission == "ask" and quiet_note(rule):
+            return
         decision.add(permission, rule, f"{titles.get(rule, rule)}: {reason}", fixes.get(rule, ""))
 
     for facts in parsed.commands:
@@ -194,20 +207,28 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
 
     for facts in parsed.commands:
         if facts.carries_text and facts.text_by_substitution:
-            decision.add(
-                "ask",
-                "ASK-1" if facts.is_commit else "ASK-3",
-                "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
-            )
+            rule = "ASK-1" if facts.is_commit else "ASK-3"
+            if not quiet_note(rule):
+                decision.add(
+                    "ask",
+                    rule,
+                    "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
+                )
         if facts.carries_text and facts.text_file_missing:
-            decision.add(
-                "ask",
-                "ASK-1" if facts.is_commit else "ASK-3",
-                "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
-            )
+            rule = "ASK-1" if facts.is_commit else "ASK-3"
+            if not quiet_note(rule):
+                decision.add(
+                    "ask",
+                    rule,
+                    "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
+                )
         if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
-            what = "amend" if facts.amend else "commit"
-            add("ask", "ASK-1", f"{what} needs your go-ahead")
+            # slice scope: only the commit that would start the unpushed slice asks; the push
+            # and the post are the slice boundary and ask unchanged.
+            continuing = cfg.confirm_scope == "slice" and not first_unpushed(facts.workdir or cwd)
+            if not continuing:
+                what = "amend" if facts.amend else "commit"
+                add("ask", "ASK-1", f"{what} needs your go-ahead")
         if facts.is_push and not facts.dry_run and cfg.confirm_push:
             where = (
                 ", ".join(facts.targets)
@@ -328,6 +349,36 @@ def trufflehog_scan(added: str) -> str | None:
             detectors.append(name)
     named = ", ".join(detectors[:3]) if detectors else "a credential"
     return f"trufflehog: {named} detected in the staged changes"
+
+
+def first_unpushed(cwd: Path | None) -> bool:
+    """True when a commit now would be the branch's first unpushed commit (every commit on
+    HEAD is already on a remote), or when git cannot say. The doubt fails closed, so the
+    commit asks rather than slipping through."""
+    if cwd is None:
+        return True
+    try:
+        remotes = subprocess.run(
+            ["git", "-C", str(cwd), "remote"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if remotes.returncode != 0 or not remotes.stdout.strip():
+            return True  # no remote to diff against: the safe answer is to ask
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "rev-list", "HEAD", "--not", "--remotes", "--count"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if result.returncode != 0 or not result.stdout.strip().isdigit():
+        return True
+    return int(result.stdout.strip()) == 0
 
 
 def head_sha(cwd: Path) -> str | None:

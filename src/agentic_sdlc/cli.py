@@ -8,7 +8,7 @@ agentic-sdlc check-skills                 skill frontmatter, rule citations, att
 agentic-sdlc validate                     the registry and the repository config
 agentic-sdlc coverage [--check]           docs/coverage.md from the registry
 agentic-sdlc hooks install|status|uninstall native git hooks for any agent
-agentic-sdlc log [--last N]               the decisions the hook recorded here
+agentic-sdlc log [--last N] [--summary]   the decisions the hook recorded here
 agentic-sdlc check-mr [--strict]          GitLab CI: title, description and commits of the MR
 agentic-sdlc bench                        how long a decision takes
 """
@@ -24,6 +24,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -170,6 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("log", help="print the decisions the hook recorded for this repository")
     p.add_argument("--dir", default=".", help="repository directory")
     p.add_argument("--last", type=int, default=20, help="how many recent decisions to print")
+    p.add_argument(
+        "--summary",
+        action="store_true",
+        help="aggregate the whole record: counts by decision, per rule and by kind",
+    )
     p.set_defaults(func=cmd_log)
 
     p = sub.add_parser(
@@ -784,7 +790,10 @@ def cmd_log(args: argparse.Namespace) -> int:
             "or AGENTIC_SDLC_RECORD=1"
         )
         return 0
-    for entry in record.read(path, args.last):
+    entries = record.read(path, 0 if args.summary else args.last)
+    if args.summary:
+        return print_log_summary(entries)
+    for entry in entries:
         shadow = " (shadow)" if entry.get("shadow") else ""
         rules = ", ".join(entry.get("rules", [])) or "-"
         print(
@@ -792,6 +801,31 @@ def cmd_log(args: argparse.Namespace) -> int:
             f"{entry.get('decision', '?'):<5}{shadow}  {rules}  {entry.get('ms', '?')} ms  "
             f"{entry.get('command_sha256', '')}"
         )
+    return 0
+
+
+def print_log_summary(entries: list[dict]) -> int:
+    """The whole record as counts: by decision first, then per rule, then the top kinds."""
+    if not entries:
+        print("log: the record is empty")
+        return 0
+    decisions = Counter(e.get("decision", "?") for e in entries)
+    headline = ", ".join(f"{decisions[d]} {d}" for d in ("allow", "ask", "deny") if decisions[d])
+    print(f"{len(entries)} decisions: {headline}")
+    per_rule: dict[str, Counter] = {}
+    for entry in entries:
+        for rule in entry.get("rules", []):
+            per_rule.setdefault(rule, Counter())[entry.get("decision", "?")] += 1
+    for rule in sorted(per_rule):
+        counts = per_rule[rule]
+        detail = ", ".join(f"{counts[d]} {d}" for d in ("allow", "ask", "deny") if counts[d])
+        print(f"  {rule:<10} {detail}")
+    kinds = Counter(kind for entry in entries for kind in entry.get("kinds", []))
+    if kinds:
+        print("top kinds: " + ", ".join(f"{kind} {n}" for kind, n in kinds.most_common(10)))
+    days = [e.get("ts", "")[:10] for e in entries if e.get("ts")]
+    if days:
+        print(f"from {min(days)} to {max(days)}")
     return 0
 
 

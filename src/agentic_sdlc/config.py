@@ -10,11 +10,15 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import registry
+
 CONFIG_NAME = ".agentic-sdlc.json"
 SCANNERS = ("trufflehog", "none")
+CONFIRM_SCOPES = ("each", "slice", "off")
 
 # Names that identify a tool when they appear inside a trailer, a footer or a sign-off.
 # Wide on purpose: in that position a match is unambiguous.
@@ -95,6 +99,8 @@ class Config:
     confirm_commit: bool = True
     confirm_push: bool = True
     confirm_post: bool = True
+    confirm_scope: str = "each"
+    quiet_rules: list[dict[str, Any]] = field(default_factory=list)
     deny_add_all: bool = True
     deny_commit_all: bool = True
     scan_staged: bool = True
@@ -190,8 +196,23 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         cfg.confirm_commit = _flag(confirm, "commit", True, problems, "confirm")
         cfg.confirm_push = _flag(confirm, "push", True, problems, "confirm")
         cfg.confirm_post = _flag(confirm, "post", True, problems, "confirm")
+        scope = confirm.get("scope", "each")
+        if scope in CONFIRM_SCOPES:
+            cfg.confirm_scope = scope
+        else:
+            problems.append("confirm.scope must be each, slice or off")
+        quiet = confirm.get("quiet_rules", [])
+        if isinstance(quiet, list):
+            for entry in quiet:
+                parsed_entry = _quiet_rule(entry, problems)
+                if parsed_entry is not None:
+                    cfg.quiet_rules.append(parsed_entry)
+        else:
+            problems.append("confirm.quiet_rules must be an array of {rule, until} objects")
     else:
         problems.append("confirm must be an object")
+    if cfg.confirm_scope == "off":
+        cfg.confirm_commit = cfg.confirm_push = cfg.confirm_post = False
 
     trace = data.get("trace") or {}
     if isinstance(trace, dict):
@@ -254,6 +275,37 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
     else:
         problems.append("posting must be an object")
     return cfg
+
+
+def _quiet_rule(entry: Any, problems: list[str]) -> dict[str, Any] | None:
+    """One quiet_rules entry as {"rule": id, "until": date}, or None with a problem noted.
+    Only an ask rule can be quieted; an expired entry is kept but warns, so a quiet period
+    cannot silently run forever."""
+    if not isinstance(entry, dict):
+        problems.append("confirm.quiet_rules entries must be objects with rule and until")
+        return None
+    rule, until = entry.get("rule"), entry.get("until")
+    if not isinstance(rule, str) or not isinstance(until, str):
+        problems.append("confirm.quiet_rules entries need a rule id and an until date")
+        return None
+    known = registry.by_id()
+    if rule not in known:
+        problems.append(f"confirm.quiet_rules names unknown rule {rule}")
+        return None
+    if known[rule].get("decision") == "deny":
+        problems.append(f"confirm.quiet_rules cannot suppress deny rule {rule}")
+        return None
+    if known[rule].get("decision") != "ask":
+        problems.append(f"confirm.quiet_rules rule {rule} is not an ask rule")
+        return None
+    try:
+        until_date = date.fromisoformat(until)
+    except ValueError:
+        problems.append(f"confirm.quiet_rules until must be a YYYY-MM-DD date, got {until!r}")
+        return None
+    if until_date < datetime.now(timezone.utc).date():
+        problems.append(f"confirm.quiet_rules entry for {rule} expired on {until_date}")
+    return {"rule": rule, "until": until_date}
 
 
 def _flag(obj: dict[str, Any], key: str, default: bool, problems: list[str], section: str) -> bool:

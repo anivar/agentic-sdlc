@@ -212,6 +212,8 @@ a default; an absent file means the defaults.
 | `attribution.mode` | `"patterns"`; `"strict"` refuses any vendor mention | ATTR-1, ATTR-2 |
 | `attribution.vendors` | adds to the built-in names | ATTR-1, ATTR-2 |
 | `confirm.commit`, `confirm.push`, `confirm.post` | `true` | ASK-1, ASK-2, ASK-3 |
+| `confirm.scope` | `"each"`; `"slice"` asks for a commit only when it would start the branch's unpushed slice (the push and the post still ask), `"off"` switches all three confirms off | ASK-1 |
+| `confirm.quiet_rules` | `[]`; entries `{rule, until}` silence a named ask rule until a UTC date. A deny rule is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason | the ask rules |
 | `stage.deny_add_all`, `stage.deny_commit_all` | `true` | STAGE-1 |
 | `trace.untracked` | `"allow"`; `"ask"` or `"deny"` answers with that decision for a command the parser cannot trace to git, gh or glab; a command made only of read-only programs still passes | TRACE-2 |
 | `secrets.scan_staged`, `secrets.scanner`, `secrets.extra_patterns` | `true`, `"trufflehog"` (or `"none"`), `[]`; the 1.0 key `use_gitleaks` still reads, with a warning | SECRET-1 |
@@ -261,6 +263,15 @@ a default; an absent file means the defaults.
 The plugin, the skills and the git hooks are forge-neutral. For the merge request check,
 `agentic-sdlc check-mr` reads the predefined `CI_MERGE_REQUEST_*` variables and the commits since
 the merge base; [`gitlab-ci.yml`](skills/setup-conventions/assets/gitlab-ci.yml) is the job to include.
+
+### Tuning friction with data
+
+With `record.decisions` on, `agentic-sdlc log --summary` counts the record: decisions by
+outcome, asks and denies per rule, the top command kinds, over the dates covered. A rule that
+asks every time and is approved every time is a candidate for `confirm.quiet_rules` with an
+expiry date; the entry warns once it expires, so a quiet period cannot run forever unnoticed.
+`confirm.scope: slice` is the coarser dial: a commit asks only when it would be the branch's
+first unpushed commit, and the push and the post still ask because they bound the slice.
 
 ## Try the hook by hand
 

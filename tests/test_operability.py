@@ -334,3 +334,17 @@ def test_config_schema_documents_trace():
         "ask",
         "deny",
     ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="posix paths")
+def test_config_schema_documents_confirm():
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas" / "config.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    confirm = schema["properties"]["confirm"]["properties"]
+    assert set(confirm) == {"commit", "push", "post", "scope", "quiet_rules"}
+    assert confirm["scope"]["enum"] == ["each", "slice", "off"]
+    item = confirm["quiet_rules"]["items"]
+    assert item["required"] == ["rule", "until"]
