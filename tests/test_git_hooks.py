@@ -41,7 +41,7 @@ def test_commit_msg_hook_honours_strict_config(tmp_path: Path):
 
 def test_pre_commit_hook_refuses_staged_secret(repo: Path, capsys):
     (repo / ".agentic-sdlc.json").write_text(
-        json.dumps({"secrets": {"use_gitleaks": False}}), encoding="utf-8"
+        json.dumps({"secrets": {"scanner": "none"}}), encoding="utf-8"
     )
     assert run("check-staged", "--config-dir", str(repo)) == 0
     (repo / "k.py").write_text("token = 'ghp_" + "a" * 36 + "'\n", encoding="utf-8")

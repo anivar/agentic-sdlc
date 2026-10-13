@@ -1,4 +1,5 @@
-# GitLab CI: the attribution check on merge requests (ATTR-1, ATTR-2 when --strict).
+# GitLab CI: the attribution check and the secret scan on merge requests (ATTR-1, ATTR-2 when
+# --strict, SECRET-1).
 # Paste the job into .gitlab-ci.yml or keep this file and `include:` it. The job reads the
 # predefined CI_MERGE_REQUEST_* variables and the commits since the merge base, so it needs
 # the full history (GIT_DEPTH: 0) and a merge request pipeline.
@@ -14,3 +15,17 @@ conventions:
   script:
     - uvx --from git+https://github.com/anivar/agentic-sdlc@v1.0.0 agentic-sdlc check-mr --config-dir .
     # add --strict to refuse any vendor mention, --require-signoff for a Signed-off-by on every commit
+
+secrets:
+  stage: test
+  image:
+    name: trufflesecurity/trufflehog:3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0
+  script:
+    # the same range and flags the GitHub action uses: the merge request's commits, failing on a
+    # credential that is live or whose check errored
+    - trufflehog git file://. --since-commit "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --branch "$CI_COMMIT_SHA" --results=verified,unknown --fail --no-update

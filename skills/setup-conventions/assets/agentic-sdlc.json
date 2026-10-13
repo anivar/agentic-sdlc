@@ -17,7 +17,7 @@
   },
   "secrets": {
     "scan_staged": true,
-    "use_gitleaks": true,
+    "scanner": "trufflehog",
     "extra_patterns": []
   },
   "posting": {

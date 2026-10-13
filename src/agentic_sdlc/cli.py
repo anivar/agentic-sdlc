@@ -839,7 +839,7 @@ BENCH_COMMANDS = (
 
 def cmd_bench(args: argparse.Namespace) -> int:
     cwd = Path(args.cwd).resolve()
-    cfg = config_mod.from_dict({"secrets": {"use_gitleaks": False}})
+    cfg = config_mod.from_dict({"secrets": {"scanner": "none"}})
     for command in BENCH_COMMANDS:
         samples = []
         for _ in range(args.iterations):

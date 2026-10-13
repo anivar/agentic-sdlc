@@ -16,7 +16,7 @@ from agentic_sdlc import config as config_mod
 from tests.conftest import git
 
 HOOK = Path(__file__).resolve().parent.parent / "src" / "agentic_sdlc" / "hook.py"
-NO_GITLEAKS = config_mod.from_dict({"secrets": {"use_gitleaks": False}})
+NO_SCANNER = config_mod.from_dict({"secrets": {"scanner": "none"}})
 
 
 def example_cases():
@@ -38,7 +38,7 @@ def test_registry_examples_decide_as_written(
 ):
     """Every example in the registry decides as its key says; when the key is the rule's own
     decision, the rule itself is among the reasons."""
-    decision = guard.decide(command, repo, NO_GITLEAKS)
+    decision = guard.decide(command, repo, NO_SCANNER)
     assert decision.permission == expected, (rule_id, command, decision.reason)
     if expected == own:
         assert rule_id in decision.rules, (rule_id, command, decision.rules)
@@ -53,7 +53,7 @@ def test_every_hook_rule_has_a_fix_line_and_examples():
 
 
 def test_refusals_carry_the_fix_line(repo: Path):
-    decision = guard.decide("git add -A", repo, NO_GITLEAKS)
+    decision = guard.decide("git add -A", repo, NO_SCANNER)
     assert "Fix: Stage the files by name" in decision.reason
 
 
@@ -65,22 +65,22 @@ def test_hook_bypass_flags_are_refused(repo: Path):
         'git -c core.hooksPath=/dev/null commit -m "x"',
         "git -c include.path=/tmp/x commit -m x",
     ):
-        decision = guard.decide(raw, repo, NO_GITLEAKS)
+        decision = guard.decide(raw, repo, NO_SCANNER)
         assert decision.permission == "deny" and "GUARD-1" in decision.rules, raw
-    assert guard.decide('git commit --dry-run -m "x"', repo, NO_GITLEAKS).permission == "allow"
+    assert guard.decide('git commit --dry-run -m "x"', repo, NO_SCANNER).permission == "allow"
     for raw in (
         "git config core.hooksPath /tmp/x",
         "git config --global core.hookspath /tmp/x",
         "git config include.path ~/x",
     ):
-        decision = guard.decide(raw, repo, NO_GITLEAKS)
+        decision = guard.decide(raw, repo, NO_SCANNER)
         assert decision.permission == "deny" and decision.rules == ["GUARD-1"], raw
     for raw in (
         "git config --get core.hooksPath",
         "git config --unset core.hooksPath",
         "git config user.name Someone",
     ):
-        assert guard.decide(raw, repo, NO_GITLEAKS).permission == "allow", raw
+        assert guard.decide(raw, repo, NO_SCANNER).permission == "allow", raw
 
 
 def test_secret_file_reads_ask_and_ordinary_reads_do_not(repo: Path):
@@ -91,7 +91,7 @@ def test_secret_file_reads_ask_and_ordinary_reads_do_not(repo: Path):
         "cp .env /tmp/x",
         "base64 certs/server.key",
     ):
-        decision = guard.decide(raw, repo, NO_GITLEAKS)
+        decision = guard.decide(raw, repo, NO_SCANNER)
         assert decision.permission == "ask" and "SECRET-3" in decision.rules, raw
     for raw in (
         "cat README.md",
@@ -99,7 +99,7 @@ def test_secret_file_reads_ask_and_ordinary_reads_do_not(repo: Path):
         "cat .envrc.example.md",
         "cp .env.example .env",
     ):
-        assert guard.decide(raw, repo, NO_GITLEAKS).permission == "allow", raw
+        assert guard.decide(raw, repo, NO_SCANNER).permission == "allow", raw
 
 
 def test_message_file_written_in_the_same_command_is_scanned_from_the_raw_text(repo: Path):
@@ -107,12 +107,12 @@ def test_message_file_written_in_the_same_command_is_scanned_from_the_raw_text(r
         "printf 'Note\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>\\n' > msg.txt "
         "&& git commit --allow-empty -F msg.txt"
     )
-    decision = guard.decide(raw, repo, NO_GITLEAKS)
+    decision = guard.decide(raw, repo, NO_SCANNER)
     assert decision.permission == "deny" and "ATTR-1" in decision.rules, decision.reason
-    missing = guard.decide("git commit -F missing.txt", repo, NO_GITLEAKS)
+    missing = guard.decide("git commit -F missing.txt", repo, NO_SCANNER)
     assert missing.permission == "ask" and "does not exist yet" in missing.reason
     (repo / "m.txt").write_text("Plain message\n", encoding="utf-8")
-    present = guard.decide("git commit -F m.txt", repo, NO_GITLEAKS)
+    present = guard.decide("git commit -F m.txt", repo, NO_SCANNER)
     assert present.permission == "ask" and "does not exist" not in present.reason
 
 
@@ -147,7 +147,7 @@ def bash_event(command: str, cwd: Path, mode: str = "default") -> dict:
 
 
 def write_config(repo: Path, extra: dict) -> None:
-    data = {"secrets": {"use_gitleaks": False}}
+    data = {"secrets": {"scanner": "none"}}
     data.update(extra)
     (repo / ".agentic-sdlc.json").write_text(json.dumps(data), encoding="utf-8")
 

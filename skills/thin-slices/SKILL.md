@@ -40,7 +40,7 @@ that keep a change small enough to review.
 | STAGE-1 | Stage by path | Hook: `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, and `git commit -a` are refused. `git add -A src/` passes. |
 | PUSH-1 | No force push to a protected branch | Hook: refused. A protected branch moves by merged pull request only. |
 | PUSH-2 | Moving a tag is confirmed and explained | Hook: asks, and says that every workflow triggered on tag pushes runs again and release assets may be rebuilt. |
-| SECRET-1 | No key-shaped literals | Hook: staged changes are scanned before the commit; CI runs gitleaks. Tests generate keys at runtime; documentation samples use placeholders. |
+| SECRET-1 | No key-shaped literals | Hook: staged changes are scanned before the commit; CI runs TruffleHog. Tests generate keys at runtime; documentation samples use placeholders. |
 | SECRET-2 | Never print a secret | Variable name, `file:line`, length or hash. Exclude token-bearing lines before summarising a log. Never trust a masking regex. |
 | PROD-1 | Production is read-only | Unless the decider says otherwise for that action. The production targets are the ones `docs/agents/conventions.md` names. |
 | REVIEW-6 | Confirm the diff is absent before merging | And re-diff a conflict resolution against the target's current file. |

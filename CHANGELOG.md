@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+### Changed
+
+- Secret scanning moves from gitleaks to TruffleHog. Gitleaks' README calls it feature complete,
+  with future releases limited to security patches. The hook and the native `pre-commit` hook
+  pipe the lines a staged change adds to `trufflehog stdin` with verification and the update
+  check off, so the scan makes no network call and removing a leaked key is never blocked. The
+  reusable workflow's `secrets` job runs the TruffleHog action, pinned by commit at v3.99.2, over
+  the pull request's commits and fails on a credential that is live or whose check errored; a
+  candidate TruffleHog proves dead no longer fails the check, where a gitleaks pattern match did.
+  The GitLab template gains the same scan from the TruffleHog image, pinned by digest.
+- `secrets.use_gitleaks` becomes `secrets.scanner` (`"trufflehog"` or `"none"`). The 1.0 key
+  still reads, with a warning: `true` means TruffleHog, `false` means none.
+- The `GITLEAKS_LICENSE` workflow secret is no longer used. It stays declared so a caller that
+  passes it keeps validating, and goes in 2.0.
+
+### Verified before merge
+
+- TruffleHog 3.99.2 over stdin and from a file: a GitHub token, a Slack webhook, an AWS key pair
+  and a Stripe key, each built at runtime, were reported; Amazon's documented example key and a
+  random private-key block were not (the built-in patterns cover private-key blocks). About
+  0.8 s per scan on the development machine. The same detections under a deny-network sandbox,
+  with no network error in the debug log (Measured, 2026-10-12).
+
 ## 1.0.0 (2026-10-10)
 
 First release. Eleven skills, ninety-five rules in `rules/registry.json`: thirteen enforced by the

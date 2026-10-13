@@ -96,8 +96,8 @@
         },
         "use_gitleaks": {
           "type": "boolean",
-          "default": true,
-          "description": "Run gitleaks on the staged changes when it is on PATH; the built-in patterns run either way."
+          "deprecated": true,
+          "description": "The 1.0 key, retired with gitleaks: true means scanner trufflehog, false means none. Use secrets.scanner."
         },
         "extra_patterns": {
           "description": "Additional regular expressions treated as key-shaped literals.",
@@ -107,6 +107,15 @@
             "minLength": 1
           },
           "default": []
+        },
+        "scanner": {
+          "type": "string",
+          "enum": [
+            "trufflehog",
+            "none"
+          ],
+          "default": "trufflehog",
+          "description": "The external scanner run over the staged diff when its binary is on PATH: TruffleHog over stdin with verification off (nothing leaves the machine), or none. The built-in patterns run either way."
         }
       }
     },

@@ -46,7 +46,7 @@ def test_plain_command_gets_no_decision(repo: Path):
 
 def test_commit_returns_ask(repo: Path):
     (repo / ".agentic-sdlc.json").write_text(
-        json.dumps({"secrets": {"use_gitleaks": False}}), encoding="utf-8"
+        json.dumps({"secrets": {"scanner": "none"}}), encoding="utf-8"
     )
     code, out, _ = run_hook(bash_event('git commit -m "Fix"', repo))
     assert code == 0
@@ -66,7 +66,7 @@ def test_add_all_returns_deny(repo: Path):
 
 def test_repo_config_is_honoured(repo: Path):
     (repo / ".agentic-sdlc.json").write_text(
-        json.dumps({"attribution": {"mode": "strict"}, "secrets": {"use_gitleaks": False}}),
+        json.dumps({"attribution": {"mode": "strict"}, "secrets": {"scanner": "none"}}),
         encoding="utf-8",
     )
     code, out, _ = run_hook(bash_event('git commit -m "Mention Claude in the subject"', repo))
