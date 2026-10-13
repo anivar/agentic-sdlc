@@ -15,6 +15,14 @@
 
 ### Changed
 
+- The check after a commit no longer guesses from the commit's timestamp. The hook records
+  the sha at HEAD before a commit command runs (`<git common dir>/agentic-sdlc/pre-head.json`,
+  None for an unborn HEAD) and compares it after: HEAD unchanged means the commit did not
+  land and nothing is checked, HEAD moved means the message that landed is scanned for
+  attribution. A commit backdated with a forged `GIT_COMMITTER_DATE` is caught either way,
+  and a fresh HEAD the command did not create is no longer reported. The stored sha is
+  deleted once used. When nothing was recorded, a pair that started before the upgrade, the
+  300-second recency guess stands in, documented in the code as the weak fallback.
 - Secret scanning moves from gitleaks to TruffleHog. Gitleaks' README calls it feature complete,
   with future releases limited to security patches. The hook and the native `pre-commit` hook
   pipe the lines a staged change adds to `trufflehog stdin` with verification and the update

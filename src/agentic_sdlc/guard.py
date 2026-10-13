@@ -324,6 +324,23 @@ def trufflehog_scan(added: str) -> str | None:
     return f"trufflehog: {named} detected in the staged changes"
 
 
+def head_sha(cwd: Path) -> str | None:
+    """The sha of the commit at HEAD, or None when there is no HEAD (an unborn branch) or
+    git cannot answer."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = result.stdout.strip()
+    return sha if result.returncode == 0 and sha else None
+
+
 def head_age_seconds(cwd: Path) -> float | None:
     """Seconds since the commit at HEAD was made, or None when there is no HEAD."""
     try:

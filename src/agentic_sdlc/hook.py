@@ -13,8 +13,10 @@ Three behaviours beyond the decision itself:
 - With ``record.shadow`` (or ``AGENTIC_SDLC_SHADOW=1``) the decision is recorded and every
   command is let through, so a team can see what the hook would do before it refuses anything.
 - After a commit ran (PostToolUse, which fires on success only), the message now at HEAD is
-  checked for attribution when HEAD is recent, which catches text the hook could not read
-  beforehand (``-m "$(…)"``) without reporting an older commit the agent did not make.
+  checked for attribution when HEAD moved from the sha recorded before the command, which
+  catches text the hook could not read beforehand (``-m "$(…)"``) without reporting an older
+  commit the agent did not make. When nothing was recorded (a pair started before the state
+  file existed), a recency guess stands in.
 
 If the analysis itself fails, a command that looks like a commit, push or post gets an
 ``ask`` with the error in the reason, and any other command gets no decision: a broken hook
@@ -124,13 +126,16 @@ def before_bash(call: Call) -> int:
                 "ask", f"agentic-sdlc could not analyse this command ({exc!r}); confirm it yourself"
             )
         return 0
-    kinds = [c.kind for c in command_mod.parse(call.command, call.cwd).commands]
+    parsed = command_mod.parse(call.command, call.cwd)
+    committed = [f for f in parsed.commands if f.is_commit and not f.dry_run]
+    if committed:
+        record.write_pre_head(call.cwd, guard.head_sha(committed[-1].workdir or call.cwd))
     return settle(
         call,
         cfg,
         decision,
         subject=call.command,
-        kinds=kinds,
+        kinds=[c.kind for c in parsed.commands],
         ms=(time.perf_counter() - started) * 1000,
     )
 
@@ -196,9 +201,20 @@ def after_bash(call: Call) -> int:
         if not committed:
             return 0
         where = committed[-1].workdir or call.cwd
-        age = guard.head_age_seconds(where)
-        if age is None or age > RECENT_COMMIT_SECONDS:
-            return 0  # the commit did not land, or HEAD is an older commit; nothing to check
+        stored, pre_sha = record.read_pre_head(call.cwd)
+        if stored:
+            record.drop_pre_head(call.cwd)
+            current = guard.head_sha(where)
+            if current is not None and current == pre_sha:
+                return 0  # HEAD did not move: the commit did not land, nothing to check
+            # HEAD moved, or a first commit replaced an unborn HEAD: check what landed.
+        else:
+            # The weak fallback, kept for a pair that started before the state file existed
+            # (an upgrade in flight): a committer timestamp is forgeable, so this only
+            # guesses that HEAD is fresh.
+            age = guard.head_age_seconds(where)
+            if age is None or age > RECENT_COMMIT_SECONDS:
+                return 0  # the commit did not land, or HEAD is an older commit
         findings = text.attribution_findings(guard.head_message(where), cfg)
     except Exception as exc:  # noqa: BLE001
         report_error(exc)
