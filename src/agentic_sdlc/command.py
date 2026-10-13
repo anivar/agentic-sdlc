@@ -284,6 +284,13 @@ class Facts:
     reads_secret_file: list[str] = field(default_factory=list)
 
     @property
+    def program(self) -> str:
+        """The program this simple command runs once wrappers and redirections are stripped,
+        or an empty string when nothing is left."""
+        rest = _strip_wrappers(_strip_redirections(self.tokens))
+        return _basename(rest[0]) if rest else ""
+
+    @property
     def is_commit(self) -> bool:
         return self.kind == "git-commit"
 

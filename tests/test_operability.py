@@ -278,3 +278,18 @@ def test_config_schema_documents_record():
         )
     )
     assert set(schema["properties"]["record"]["properties"]) == {"decisions", "shadow", "path"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="posix paths")
+def test_config_schema_documents_trace():
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas" / "config.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(schema["properties"]["trace"]["properties"]) == {"untracked"}
+    assert schema["properties"]["trace"]["properties"]["untracked"]["enum"] == [
+        "allow",
+        "ask",
+        "deny",
+    ]

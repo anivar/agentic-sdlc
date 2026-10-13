@@ -152,6 +152,7 @@ FALLBACK_TITLES = {
     "ASK-2": "A push waits for a go-ahead",
     "ASK-3": "A post waits for a go-ahead",
     "TRACE-1": "An untraceable gated command is confirmed",
+    "TRACE-2": "An untraced command is suspicious when configured",
     "GUARD-1": "Hook bypass flags are refused",
     "GUARD-2": "The guard's own configuration is changed knowingly",
 }

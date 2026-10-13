@@ -104,6 +104,7 @@ class Config:
     record_decisions: bool = False
     record_shadow: bool = False
     record_path: str = ""
+    trace_untracked: str = "allow"
     source: Path | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -152,6 +153,7 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         "secrets",
         "posting",
         "record",
+        "trace",
     }
     for key in data:
         if key not in known_top:
@@ -190,6 +192,16 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         cfg.confirm_post = _flag(confirm, "post", True, problems, "confirm")
     else:
         problems.append("confirm must be an object")
+
+    trace = data.get("trace") or {}
+    if isinstance(trace, dict):
+        untracked = trace.get("untracked", "allow")
+        if untracked in ("allow", "ask", "deny"):
+            cfg.trace_untracked = untracked
+        else:
+            problems.append("trace.untracked must be allow, ask or deny")
+    else:
+        problems.append("trace must be an object")
 
     stage = data.get("stage") or {}
     if isinstance(stage, dict):

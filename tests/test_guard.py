@@ -175,4 +175,8 @@ def test_config_problems_are_reported_not_fatal(repo: Path):
 def test_looks_gated_pre_check():
     assert guard.looks_gated("git commit -m x")
     assert guard.looks_gated("gh pr merge 1")
+    assert guard.looks_gated('python3 -c \'import subprocess; subprocess.run(["git", "push"])\'')
+    assert guard.looks_gated('node -e \'require("child_process").execSync("git commit")\'')
     assert not guard.looks_gated("cargo build")
+    assert not guard.looks_gated("python3 -c 'print(1)'")
+    assert not guard.looks_gated("python3 deploy.py")

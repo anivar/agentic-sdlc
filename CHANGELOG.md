@@ -2,6 +2,17 @@
 
 ## 1.1.0 (unreleased)
 
+### Added
+
+- TRACE-2 and the `trace.untracked` key (`"allow"`, `"ask"` or `"deny"`; the default stays
+  `"allow"`). At ask or deny the hook answers with that decision for a command it cannot trace
+  to a git, gh or glab invocation, closing the silent-allow hole for a command behind an
+  interpreter or an unknown program. A command made only of read-only programs (`ls`, `cat`,
+  `grep` and the like) still passes, and SECRET-3 governs a read of a credential file either way.
+- The gated-command pre-check also sees an inline interpreter script (`python3 -c`, `node -e`,
+  `ruby -e`, `perl -e`) whose text runs git, including the verb split into separate arguments
+  (`["git", "push"]`). TRACE-1 asks for those.
+
 ### Changed
 
 - Secret scanning moves from gitleaks to TruffleHog. Gitleaks' README calls it feature complete,

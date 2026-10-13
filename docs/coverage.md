@@ -98,14 +98,15 @@ Mechanism: **hook** means the PreToolUse hook decides; **githook** means a nativ
 | SETUP-2 | Tracker and labels recorded first | Where tickets live and which labels are used MUST be recorded in docs/agents/tracker.md before any skill publishes a ticket. | skill |  | setup-conventions | cut-tickets, setup-conventions | 1.0.0 | active |
 | SETUP-3 | Mechanisms arrive as a reviewed change | The repository configuration, the reusable workflow and the ruleset import MUST land as a reviewed pull request, never silently. | skill |  | setup-conventions | setup-conventions | 1.0.0 | active |
 | TRACE-1 | An untraceable gated command is confirmed | When a command mentions a commit, a push, a bulk add or a forge write but the parser cannot trace it to a git, gh or glab invocation (a variable, an interpreter, an unusual wrapper), the command MUST be confirmed by the user before it runs. | hook, skill | ask | thin-slices | thin-slices | 1.0.0 | active |
+| TRACE-2 | An untraced command is suspicious when configured | When the parser cannot trace a command to a git, gh or glab invocation and trace.untracked is ask or deny, the hook MUST answer with that decision, unless every simple command in it is a read-only program. | hook, skill | ask | thin-slices | thin-slices | 1.1.0 | active |
 | GUARD-1 | Hook bypass flags are refused | An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, and git config setting core.hooksPath or include.path are refused. | hook, skill | deny | thin-slices | thin-slices | 1.0.0 | active |
 | GUARD-2 | The guard's own configuration is changed knowingly | An agent's edit to .agentic-sdlc.json, a git hook, .claude/settings.json, .claude/settings.local.json or .pre-commit-config.yaml MUST be confirmed by the user before it is written. | hook, skill | ask | setup-conventions | setup-conventions | 1.0.0 | active |
 | SECRET-3 | Reading a secret file asks | Reading, grepping, copying or sending a file that by name holds credentials (.env files, private keys, .netrc, .npmrc, .pypirc, credentials.json, PEM and keystore files) MUST be confirmed by the user before it happens. | hook, skill | ask | thin-slices | thin-slices | 1.0.0 | active |
 
 | Mechanism | Rules |
 |---|---|
-| hook | 13 |
+| hook | 14 |
 | githook | 4 |
 | ci | 9 |
 | ruleset | 1 |
-| skill | 95 |
+| skill | 96 |

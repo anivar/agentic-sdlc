@@ -1176,6 +1176,26 @@
       }
     },
     {
+      "id": "TRACE-2",
+      "title": "An untraced command is suspicious when configured",
+      "statement": "When the parser cannot trace a command to a git, gh or glab invocation and trace.untracked is ask or deny, the hook MUST answer with that decision, unless every simple command in it is a read-only program.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.1.0",
+      "status": "active",
+      "fix": "Run the git, gh or glab command directly so the hook can trace it, or set trace.untracked to allow.",
+      "examples": {
+        "allow": [
+          "python3 -c 'print(1)'",
+          "ls -la | grep README"
+        ]
+      }
+    },
+    {
       "id": "GUARD-1",
       "title": "Hook bypass flags are refused",
       "statement": "An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, and git config setting core.hooksPath or include.path are refused.",

@@ -31,6 +31,7 @@ RULE_IDS = (
     "ASK-2",
     "ASK-3",
     "TRACE-1",
+    "TRACE-2",
     "GUARD-1",
     "GUARD-2",
 )
@@ -41,7 +42,11 @@ GATED_HINT_RE = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:commit|push|tag)\b"
     r"|\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:-A\b|--all\b|\.(?:\s|$))"
     r"|\bgh\s+(?:pr|issue|release|api|repo|label|workflow|run|gist|secret|variable|project)\b"
-    r"|\bglab\s+(?:mr|issue|release|api|repo|label|ci|variable)\b",
+    r"|\bglab\s+(?:mr|issue|release|api|repo|label|ci|variable)\b"
+    # Interpreter evasion: an inline script whose text runs git, with the verb spelled out or
+    # split into separate arguments ("git", "push"). Scoped to a -c/-e flag so an interpreter
+    # call that never names git stays out.
+    r"|\b(?:python3?|node|ruby|perl)\b(?:\s+-[^\s]*[ce][^\s]*)+\s+[^\n]*\bgit\b[\s'\",]+(?:push|commit|add)\b",
     re.IGNORECASE,
 )
 
@@ -50,6 +55,29 @@ GUARD_CONFIG_RE = re.compile(
     r"(^|/)(\.agentic-sdlc\.json|\.pre-commit-config\.yaml|\.claude/settings(\.local)?\.json"
     r"|\.git/hooks/[^/]+|hooks/hooks\.json)$"
 )
+
+# Programs an untraced command may be made of and still pass TRACE-2: they only read or print.
+# Anything else the parser cannot trace is unknown, and unknown means suspicious.
+UNTRACED_READ_ONLY = {
+    "ls",
+    "pwd",
+    "echo",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "find",
+    "wc",
+    "sort",
+    "uniq",
+    "which",
+    "env",
+    "date",
+    "uname",
+    "true",
+    "test",
+    "printf",
+}
 
 
 @dataclass
@@ -78,6 +106,13 @@ def looks_gated(command: str) -> bool:
     """A cheap textual pre-check: the command mentions a commit, push, bulk add or forge write.
     Used to fail closed when analysis crashes, and to ask when the parser could not trace one."""
     return GATED_HINT_RE.search(command) is not None
+
+
+def _only_read_only(parsed: command_mod.Parsed) -> bool:
+    """Every simple command is one of the read-only programs in ``UNTRACED_READ_ONLY``."""
+    return bool(parsed.commands) and all(
+        facts.program in UNTRACED_READ_ONLY for facts in parsed.commands
+    )
 
 
 def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None = None) -> Decision:
@@ -148,6 +183,13 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             "ask",
             "TRACE-1",
             "the command mentions a commit, push or forge write that the parser could not trace; confirm it yourself",
+        )
+
+    if cfg.trace_untracked != "allow" and not parsed.traced and not _only_read_only(parsed):
+        add(
+            cfg.trace_untracked,
+            "TRACE-2",
+            "the parser could not trace this command to a git, gh or glab invocation; an untraced command is suspicious under trace.untracked",
         )
 
     for facts in parsed.commands:

@@ -85,6 +85,22 @@
         }
       }
     },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "untracked": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "default": "allow",
+          "description": "What the hook does with a command it cannot trace to a git, gh or glab invocation: allow (the default), ask or deny (TRACE-2). A command made only of read-only programs (ls, cat, grep and the like) is always allowed."
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "additionalProperties": false,
