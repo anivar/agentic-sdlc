@@ -8,6 +8,7 @@ carry the pattern name and the line number, never the matched value.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -43,6 +44,55 @@ FOOTER_VERBS = (
 )
 ROBOT_RE = re.compile("\U0001f916")
 
+# A footer verb followed by a capitalized token that reads as a product name (an inner
+# uppercase letter or a digit, as in DevTool9000) is attribution even when the vendor list
+# does not know the name: a human never writes "Generated with X". A plain lowercase word
+# ("generated with care") or an ordinary capitalized word ("written with Rust") stays clean.
+FOOTER_TOOL_RE = re.compile(
+    rf"(?i:\b{FOOTER_VERBS}\s+(?:with|by|using)\s+(?:the\s+|an?\s+)?)(?P<token>[A-Z][A-Za-z0-9_-]*)"
+)
+
+
+def _tool_shaped(token: str) -> bool:
+    body = token[1:]
+    return any(c.isupper() for c in body) or any(c.isdigit() for c in body)
+
+
+# Cyrillic and Greek letters that look like ASCII ones, mapped so a homoglyph cannot hide a
+# vendor name or a trailer key from the patterns.
+_CONFUSABLES = {
+    "а": "a",
+    "е": "e",
+    "о": "o",
+    "р": "p",
+    "с": "c",
+    "х": "x",
+    "у": "y",
+    "А": "A",
+    "Е": "E",
+    "О": "O",
+    "Р": "P",
+    "С": "C",
+    "Х": "X",
+    "У": "Y",
+    "α": "a",
+    "ε": "e",
+    "ο": "o",
+    "ρ": "p",
+    "χ": "x",
+}
+
+
+def _normalize(line: str) -> str:
+    """The line as the patterns should see it: NFKD, format characters (zero-width joiners
+    and spaces, the soft hyphen) removed, confusable letters as ASCII."""
+    out = []
+    for ch in unicodedata.normalize("NFKD", line):
+        if unicodedata.category(ch) == "Cf":
+            continue
+        out.append(_CONFUSABLES.get(ch, ch))
+    return "".join(out)
+
 
 def attribution_findings(text: str, cfg: config_mod.Config | None = None) -> list[Finding]:
     """ATTR-1 always; ATTR-2 when the config is strict."""
@@ -66,21 +116,26 @@ def attribution_findings(text: str, cfg: config_mod.Config | None = None) -> lis
         stripped = line.strip()
         if not stripped:
             continue
-        trailer = TRAILER_RE.match(line)
+        scanned = _normalize(line)
+        trailer = TRAILER_RE.match(scanned)
         if trailer:
             value = trailer.group("value")
             if vendor_word.search(value) or domain_re.search(value):
                 findings.append(Finding("ATTR-1", "tool trailer", number, stripped[:120]))
                 continue
-        if footer_re.search(line):
+        if footer_re.search(scanned):
             findings.append(Finding("ATTR-1", "generated-with footer", number, stripped[:120]))
             continue
-        if ROBOT_RE.search(line) and (
-            vendor_word.search(line) or re.search(FOOTER_VERBS, line, re.I)
+        tool = FOOTER_TOOL_RE.search(scanned)
+        if tool and _tool_shaped(tool.group("token")):
+            findings.append(Finding("ATTR-1", "tool-named footer", number, stripped[:120]))
+            continue
+        if ROBOT_RE.search(scanned) and (
+            vendor_word.search(scanned) or re.search(FOOTER_VERBS, scanned, re.I)
         ):
             findings.append(Finding("ATTR-1", "robot emoji", number, stripped[:120]))
             continue
-        if strict_re is not None and strict_re.search(line):
+        if strict_re is not None and strict_re.search(scanned):
             findings.append(Finding("ATTR-2", "vendor mention", number, stripped[:120]))
     return findings
 

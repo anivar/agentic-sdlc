@@ -178,6 +178,7 @@ ask: ASK-3
 | A credential read the parser cannot see: through an interpreter (`python -c 'open(".env")'`), or the whole environment printed (`env`, `printenv`) | SECRET-3 matches file names on the command line and in the file tools, not program semantics | SECRET-2 in the skills (never print a secret); the agent's sandbox |
 | An edit to the guard's own configuration through Bash (`sed -i`, a redirection), or hooks moved through the environment (`GIT_CONFIG_PARAMETERS`) | GUARD-2 watches the file tools; the parser drops redirection targets and environment assignments | the pull request review sees the change; CI and the ruleset do not read the local config |
 | A crash in the hook on the file tools | it carries no `onFailure: block`, by design: a broken guard must not stop every read | the Bash hook keeps `onFailure: block`; the error shows in the transcript |
+| Attribution patterns dodged with look-alike letters or invisible characters | the patterns match ASCII vendor names and trailer keys | each line is normalized before the scan (NFKD, format characters stripped, confusable Cyrillic and Greek mapped to ASCII), and a footer verb followed by any tool-shaped token fires without a known vendor; a script outside the confusable map still evades, and the git hooks and CI scan the same landed text |
 
 ## Why no tool attribution
 

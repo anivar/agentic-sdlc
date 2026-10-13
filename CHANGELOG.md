@@ -4,6 +4,14 @@
 
 ### Added
 
+- Attribution scanning normalizes each line before the patterns run: NFKD, format characters
+  (zero-width joiners and spaces, the soft hyphen) stripped, confusable Cyrillic and Greek
+  letters mapped to ASCII. `Claude` written with a Cyrillic а, or a trailer key broken up with
+  a zero-width space, no longer slips past ATTR-1; the finding's excerpt keeps the original
+  line. A footer verb ("generated with", "made with" and the like) followed by a capitalized
+  tool-shaped token, mixed case or digits as in DevTool9000, is ATTR-1 even when the vendor
+  list does not know the name; a plain word after the verb ("generated with care") stays
+  clean.
 - The friction dial: `confirm.scope` (`"each"`, the default; `"slice"` asks for a commit only
   when it would be the branch's first unpushed commit, checked with
   `git rev-list HEAD --not --remotes --count` and failing closed to an ask when git cannot say
