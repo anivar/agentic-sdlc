@@ -217,6 +217,12 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             add("ask", "ASK-2", f"push to {where} needs your go-ahead")
         if facts.post and cfg.confirm_post:
             add("ask", "ASK-3", f"{facts.post_reason} publishes or changes something on the forge")
+        if facts.unrecognized_verb:
+            add(
+                "ask",
+                "ASK-3",
+                f"{facts.post_reason} is not a subcommand the hook recognizes; review it yourself",
+            )
 
     if cfg.problems:
         decision.reasons.append("config: " + "; ".join(cfg.problems))

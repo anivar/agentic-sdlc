@@ -4,6 +4,18 @@
 
 ### Added
 
+- A `gh` or `glab` subcommand the verb tables know as neither write nor read now asks
+  (ASK-3, "review it yourself") instead of passing silently; the ask does not depend on
+  `confirm.post`, like TRACE-1. The tables were re-grounded against gh 2.102.0 and
+  glab 1.122.0: new writes include `gh pr revert`, `gh repo set-default`, the `discussion`,
+  `skill` and `agent-task` nouns, `glab label edit`, `glab mr for`, `glab ci run-trig`,
+  `glab variable import`, `glab repo update`/`publish`/`members`, and the `deploy-key`,
+  `gpg-key`, `incident`, `milestone`, `packages`, `runner`, `runner-controller`,
+  `securefile`, `stack`, `token` and `work-items` nouns; read verbs verified from the CLIs'
+  help (`gh browse`, `gh search`, `glab ci trace` and the like) pass.
+- `scripts/check_verb_tables.py` (`just verbs-check`, weekly in `verbs.yml` and on changes to
+  the tables) reads each installed CLI's `--help`, locally and off the network, and fails on
+  a write-shaped verb the tables do not track; a CLI absent from PATH is skipped.
 - TRACE-2 and the `trace.untracked` key (`"allow"`, `"ask"` or `"deny"`; the default stays
   `"allow"`). At ask or deny the hook answers with that decision for a command it cannot trace
   to a git, gh or glab invocation, closing the silent-allow hole for a command behind an

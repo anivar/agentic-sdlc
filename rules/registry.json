@@ -205,13 +205,15 @@
           "gh issue comment 1 --body hi",
           "gh pr merge 12 --squash",
           "gh api -X POST repos/o/r/issues -f title=t",
-          "glab mr create -t t -d d"
+          "glab mr create -t t -d d",
+          "gh attestation verify bundle.sig"
         ],
         "allow": [
           "gh pr view 12",
           "gh pr list",
           "gh api repos/o/r",
-          "glab mr view 4"
+          "glab mr view 4",
+          "gh browse"
         ]
       }
     },

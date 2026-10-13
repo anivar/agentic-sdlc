@@ -155,6 +155,7 @@ GH_WRITE: dict[str, set[str]] = {
         "lock",
         "unlock",
         "update-branch",
+        "revert",
     },
     "issue": {
         "create",
@@ -171,7 +172,17 @@ GH_WRITE: dict[str, set[str]] = {
         "develop",
     },
     "release": {"create", "edit", "delete", "delete-asset", "upload"},
-    "repo": {"create", "delete", "edit", "rename", "archive", "unarchive", "sync", "fork"},
+    "repo": {
+        "create",
+        "delete",
+        "edit",
+        "rename",
+        "archive",
+        "unarchive",
+        "sync",
+        "fork",
+        "set-default",
+    },
     "label": {"create", "edit", "delete", "clone"},
     "workflow": {"run", "enable", "disable"},
     "run": {"rerun", "cancel", "delete"},
@@ -199,7 +210,31 @@ GH_WRITE: dict[str, set[str]] = {
     "ssh-key": {"add", "delete"},
     "gpg-key": {"add", "delete"},
     "cache": {"delete"},
+    "discussion": {"create", "comment", "edit"},
+    "skill": {"publish"},
+    "agent-task": {"create"},
 }
+# Verbs verified read-only against `gh <noun> --help` (gh 2.102.0), and nouns whose every
+# verb is read-only. scripts/check_verb_tables.py watches the CLIs for verbs neither table
+# knows.
+GH_READ = {
+    "view",
+    "list",
+    "status",
+    "browse",
+    "search",
+    "diff",
+    "checks",
+    "watch",
+    "help",
+    "get",
+    "download",
+    "clone",
+    "logs",
+    "field-list",
+    "item-list",
+}
+GH_READ_NOUNS = {"browse", "search", "status", "org", "ruleset", "licenses", "completion"}
 GLAB_WRITE: dict[str, set[str]] = {
     "mr": {
         "create",
@@ -216,6 +251,7 @@ GLAB_WRITE: dict[str, set[str]] = {
         "subscribe",
         "unsubscribe",
         "delete",
+        "for",
     },
     "issue": {
         "create",
@@ -232,14 +268,56 @@ GLAB_WRITE: dict[str, set[str]] = {
         "board",
     },
     "release": {"create", "upload", "delete", "delete-asset"},
-    "repo": {"create", "delete", "archive", "unarchive", "fork", "transfer", "mirror"},
-    "label": {"create", "delete"},
-    "ci": {"run", "retry", "cancel", "delete", "trigger"},
-    "variable": {"set", "update", "delete", "create"},
+    "repo": {
+        "create",
+        "delete",
+        "archive",
+        "unarchive",
+        "fork",
+        "transfer",
+        "mirror",
+        "update",
+        "publish",
+        "members",
+    },
+    "label": {"create", "delete", "edit"},
+    "ci": {"run", "retry", "cancel", "delete", "trigger", "run-trig"},
+    "variable": {"set", "update", "delete", "create", "import"},
     "snippet": {"create", "delete"},
     "schedule": {"create", "run", "delete", "update"},
     "ssh-key": {"add", "delete"},
+    "deploy-key": {"add", "delete"},
+    "gpg-key": {"add", "delete"},
+    "incident": {"close", "note", "reopen", "subscribe", "unsubscribe"},
+    "milestone": {"create", "delete", "edit"},
+    "packages": {"delete", "upload"},
+    "runner": {"assign", "delete", "unassign", "update"},
+    "runner-controller": {"create", "delete", "update"},
+    "securefile": {"create", "remove", "update"},
+    "stack": {"create", "delete", "sync"},
+    "token": {"create", "revoke", "rotate"},
+    "work-items": {"create", "delete", "update"},
 }
+# Same grounding as the gh side (glab 1.122.0).
+GLAB_READ = {
+    "view",
+    "list",
+    "status",
+    "search",
+    "diff",
+    "watch",
+    "help",
+    "get",
+    "download",
+    "trace",
+    "approvers",
+    "contributors",
+    "issues",
+    "lint",
+    "export",
+    "jobs",
+}
+GLAB_READ_NOUNS = {"search", "iteration", "user"}
 GH_TEXT_OPTIONS = {"--body", "-b", "--title", "-t", "--notes", "-n", "--comment", "-c", "--subject"}
 GH_TEXT_FILE_OPTIONS = {"--body-file", "-F", "--notes-file", "--input"}
 GLAB_TEXT_OPTIONS = {
@@ -276,6 +354,7 @@ class Facts:
     tags_pushed: bool = False
     post: bool = False
     post_reason: str = ""
+    unrecognized_verb: bool = False
     workdir: Path | None = None
     text_by_substitution: bool = False
     text_file_missing: bool = False
@@ -1072,6 +1151,15 @@ def _classify_gh(facts: Facts, args: list[str]) -> None:
         facts.post = True
         facts.post_reason = f"gh {group} {verb}"
         _collect_text_options(facts, args[2:], GH_TEXT_OPTIONS, GH_TEXT_FILE_OPTIONS)
+    elif (
+        verb
+        and not group.startswith("-")
+        and not verb.startswith("-")
+        and group not in GH_READ_NOUNS
+        and verb not in GH_READ
+    ):
+        facts.unrecognized_verb = True
+        facts.post_reason = f"gh {group} {verb}"
 
 
 def _classify_glab(facts: Facts, args: list[str]) -> None:
@@ -1103,6 +1191,15 @@ def _classify_glab(facts: Facts, args: list[str]) -> None:
         facts.post = True
         facts.post_reason = f"glab {group} {verb}"
         _collect_text_options(facts, args[2:], GLAB_TEXT_OPTIONS, GLAB_TEXT_FILE_OPTIONS)
+    elif (
+        verb
+        and not group.startswith("-")
+        and not verb.startswith("-")
+        and group not in GLAB_READ_NOUNS
+        and verb not in GLAB_READ
+    ):
+        facts.unrecognized_verb = True
+        facts.post_reason = f"glab {group} {verb}"
 
 
 MAX_TEXT_FILE_BYTES = 1_000_000

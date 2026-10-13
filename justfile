@@ -35,6 +35,10 @@ coverage:
 coverage-check:
     uv run agentic-sdlc coverage --check
 
+# Compare the gh/glab verb tables with the installed CLIs (local --help only, no network).
+verbs-check:
+    uv run python scripts/check_verb_tables.py
+
 plugin:
     claude plugin validate --strict .
 
