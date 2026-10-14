@@ -1,6 +1,12 @@
-# Creates the GitHub release for a version tag from that version's CHANGELOG section.
-# Runs only when the tag is created: a moved tag (`git push --force` of an existing tag) does not
-# run it again, so a release and its notes are written once.
+# Creates the GitHub release for a version tag from that version's CHANGELOG section, then
+# publishes the distribution to PyPI with trusted publishing (OIDC; no API token is ever
+# created). Runs only when the tag is created: a moved tag (`git push --force` of an existing
+# tag) does not run it again, so a release and its notes are written once.
+#
+# One-time maintainer setup, before the first tag that should publish: on PyPI create a
+# pending trusted publisher for the project agentic-sdlc naming this repository
+# (anivar/agentic-sdlc), this workflow (release.yml) and the environment pypi, and create the
+# pypi environment here. From then on a signed v* tag is the whole release.
 name: release
 
 on:
@@ -40,3 +46,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --title "agentic-sdlc ${{ steps.notes.outputs.version }}" --notes-file notes.md --verify-tag
+
+  pypi:
+    name: pypi
+    if: ${{ github.event.created }}
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentic-sdlc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv build
+      - run: uv publish --trusted-publishing always

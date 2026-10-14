@@ -4,6 +4,14 @@
 
 ### Added
 
+- PyPI publishing from the release workflow with trusted publishing (OIDC; no API token is
+  ever created): a `pypi` job runs after the GitHub release, gated on `github.event.created`
+  the same way, building with `uv build` and publishing with `uv publish
+  --trusted-publishing always`. The one-time setup is a pending trusted publisher on PyPI
+  plus the `pypi` environment here; after that a signed tag is the whole release.
+  `uvx agentic-sdlc` is the install path from this release; the git URL form stays as the
+  development path. Locally, `just release` builds `dist/` (and publishes when
+  `UV_PUBLISH_TOKEN` is set) and `just outdated` shows newer development dependencies.
 - `GOVERNANCE.md`: the maintenance covenant (a fork needs no permission under the MIT
   license, `rules/registry.json` is the specification a fork builds against, the decision
   record is portable JSON Lines), the rule-id lifecycle (an id is never reused or renumbered;
@@ -63,6 +71,9 @@
 
 ### Changed
 
+- CI syncs with `uv sync --locked --group dev`, so a stale `uv.lock` fails the gate, and
+  `.python-version` pins the development interpreter to 3.13; the 3.9 floor stays a CI matrix
+  concern.
 - The hook's per-call git lookups (`rev-parse --show-toplevel`, `--git-common-dir`) are
   memoized per directory, and a parsed `.agentic-sdlc.json` is cached by path and mtime: a
   hook call in a directory with no config file runs no git subprocess after the first, and a
