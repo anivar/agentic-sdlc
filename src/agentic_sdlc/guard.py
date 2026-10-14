@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import command as command_mod
@@ -31,6 +32,7 @@ RULE_IDS = (
     "ASK-2",
     "ASK-3",
     "TRACE-1",
+    "TRACE-2",
     "GUARD-1",
     "GUARD-2",
 )
@@ -41,7 +43,11 @@ GATED_HINT_RE = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:commit|push|tag)\b"
     r"|\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:-A\b|--all\b|\.(?:\s|$))"
     r"|\bgh\s+(?:pr|issue|release|api|repo|label|workflow|run|gist|secret|variable|project)\b"
-    r"|\bglab\s+(?:mr|issue|release|api|repo|label|ci|variable)\b",
+    r"|\bglab\s+(?:mr|issue|release|api|repo|label|ci|variable)\b"
+    # Interpreter evasion: an inline script whose text runs git, with the verb spelled out or
+    # split into separate arguments ("git", "push"). Scoped to a -c/-e flag so an interpreter
+    # call that never names git stays out.
+    r"|\b(?:python3?|node|ruby|perl)\b(?:\s+-[^\s]*[ce][^\s]*)+\s+[^\n]*\bgit\b[\s'\",]+(?:push|commit|add)\b",
     re.IGNORECASE,
 )
 
@@ -50,6 +56,29 @@ GUARD_CONFIG_RE = re.compile(
     r"(^|/)(\.agentic-sdlc\.json|\.pre-commit-config\.yaml|\.claude/settings(\.local)?\.json"
     r"|\.git/hooks/[^/]+|hooks/hooks\.json)$"
 )
+
+# Programs an untraced command may be made of and still pass TRACE-2: they only read or print.
+# Anything else the parser cannot trace is unknown, and unknown means suspicious.
+UNTRACED_READ_ONLY = {
+    "ls",
+    "pwd",
+    "echo",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "find",
+    "wc",
+    "sort",
+    "uniq",
+    "which",
+    "env",
+    "date",
+    "uname",
+    "true",
+    "test",
+    "printf",
+}
 
 
 @dataclass
@@ -80,14 +109,33 @@ def looks_gated(command: str) -> bool:
     return GATED_HINT_RE.search(command) is not None
 
 
+def _only_read_only(parsed: command_mod.Parsed) -> bool:
+    """Every simple command is one of the read-only programs in ``UNTRACED_READ_ONLY``."""
+    return bool(parsed.commands) and all(
+        facts.program in UNTRACED_READ_ONLY for facts in parsed.commands
+    )
+
+
 def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None = None) -> Decision:
     cfg = cfg or config_mod.Config()
     titles = registry.titles()
     fixes = registry.fixes()
     decision = Decision()
     parsed = command_mod.parse(command, cwd, cfg.extra_posting_commands)
+    today = datetime.now(timezone.utc).date()
+    quiet = {q["rule"]: q["until"] for q in cfg.quiet_rules if q["until"] >= today}
+
+    def quiet_note(rule: str) -> bool:
+        """True when a quiet rule covers this ask; the suppression is noted for the record."""
+        until = quiet.get(rule)
+        if until is None:
+            return False
+        decision.reasons.append(f"{rule}: suppressed by confirm.quiet_rules until {until}")
+        return True
 
     def add(permission: str, rule: str, reason: str) -> None:
+        if permission == "ask" and quiet_note(rule):
+            return
         decision.add(permission, rule, f"{titles.get(rule, rule)}: {reason}", fixes.get(rule, ""))
 
     for facts in parsed.commands:
@@ -150,22 +198,37 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             "the command mentions a commit, push or forge write that the parser could not trace; confirm it yourself",
         )
 
+    if cfg.trace_untracked != "allow" and not parsed.traced and not _only_read_only(parsed):
+        add(
+            cfg.trace_untracked,
+            "TRACE-2",
+            "the parser could not trace this command to a git, gh or glab invocation; an untraced command is suspicious under trace.untracked",
+        )
+
     for facts in parsed.commands:
         if facts.carries_text and facts.text_by_substitution:
-            decision.add(
-                "ask",
-                "ASK-1" if facts.is_commit else "ASK-3",
-                "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
-            )
+            rule = "ASK-1" if facts.is_commit else "ASK-3"
+            if not quiet_note(rule):
+                decision.add(
+                    "ask",
+                    rule,
+                    "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
+                )
         if facts.carries_text and facts.text_file_missing:
-            decision.add(
-                "ask",
-                "ASK-1" if facts.is_commit else "ASK-3",
-                "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
-            )
+            rule = "ASK-1" if facts.is_commit else "ASK-3"
+            if not quiet_note(rule):
+                decision.add(
+                    "ask",
+                    rule,
+                    "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
+                )
         if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
-            what = "amend" if facts.amend else "commit"
-            add("ask", "ASK-1", f"{what} needs your go-ahead")
+            # slice scope: only the commit that would start the unpushed slice asks; the push
+            # and the post are the slice boundary and ask unchanged.
+            continuing = cfg.confirm_scope == "slice" and not first_unpushed(facts.workdir or cwd)
+            if not continuing:
+                what = "amend" if facts.amend else "commit"
+                add("ask", "ASK-1", f"{what} needs your go-ahead")
         if facts.is_push and not facts.dry_run and cfg.confirm_push:
             where = (
                 ", ".join(facts.targets)
@@ -175,6 +238,12 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             add("ask", "ASK-2", f"push to {where} needs your go-ahead")
         if facts.post and cfg.confirm_post:
             add("ask", "ASK-3", f"{facts.post_reason} publishes or changes something on the forge")
+        if facts.unrecognized_verb:
+            add(
+                "ask",
+                "ASK-3",
+                f"{facts.post_reason} is not a subcommand the hook recognizes; review it yourself",
+            )
 
     if cfg.problems:
         decision.reasons.append("config: " + "; ".join(cfg.problems))
@@ -280,6 +349,53 @@ def trufflehog_scan(added: str) -> str | None:
             detectors.append(name)
     named = ", ".join(detectors[:3]) if detectors else "a credential"
     return f"trufflehog: {named} detected in the staged changes"
+
+
+def first_unpushed(cwd: Path | None) -> bool:
+    """True when a commit now would be the branch's first unpushed commit (every commit on
+    HEAD is already on a remote), or when git cannot say. The doubt fails closed, so the
+    commit asks rather than slipping through."""
+    if cwd is None:
+        return True
+    try:
+        remotes = subprocess.run(
+            ["git", "-C", str(cwd), "remote"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if remotes.returncode != 0 or not remotes.stdout.strip():
+            return True  # no remote to diff against: the safe answer is to ask
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "rev-list", "HEAD", "--not", "--remotes", "--count"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if result.returncode != 0 or not result.stdout.strip().isdigit():
+        return True
+    return int(result.stdout.strip()) == 0
+
+
+def head_sha(cwd: Path) -> str | None:
+    """The sha of the commit at HEAD, or None when there is no HEAD (an unborn branch) or
+    git cannot answer."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = result.stdout.strip()
+    return sha if result.returncode == 0 and sha else None
 
 
 def head_age_seconds(cwd: Path) -> float | None:

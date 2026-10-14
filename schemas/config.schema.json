@@ -66,6 +66,39 @@
           "type": "boolean",
           "default": true,
           "description": "Ask before every command that creates or changes something on a forge (ASK-3)."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "each",
+            "slice",
+            "off"
+          ],
+          "default": "each",
+          "description": "each: every commit, push and post asks. slice: a commit asks only when it would be the branch's first unpushed commit; the push and the post still ask, they are the slice boundary. off: no confirm asks at all."
+        },
+        "quiet_rules": {
+          "type": "array",
+          "default": [],
+          "description": "Ask rules silenced until a date: each entry names an ask rule (ASK-1, ASK-2, ASK-3, TRACE-1, TRACE-2, PUSH-2, SECRET-3, GUARD-2) and an until date in UTC (YYYY-MM-DD). A deny rule here is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule",
+              "until"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1
+              },
+              "until": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
         }
       }
     },
@@ -82,6 +115,22 @@
           "type": "boolean",
           "default": true,
           "description": "Refuse git commit -a and --all (STAGE-1)."
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "untracked": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "default": "allow",
+          "description": "What the hook does with a command it cannot trace to a git, gh or glab invocation: allow (the default), ask or deny (TRACE-2). A command made only of read-only programs (ls, cat, grep and the like) is always allowed."
         }
       }
     },

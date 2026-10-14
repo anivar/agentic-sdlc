@@ -205,13 +205,15 @@
           "gh issue comment 1 --body hi",
           "gh pr merge 12 --squash",
           "gh api -X POST repos/o/r/issues -f title=t",
-          "glab mr create -t t -d d"
+          "glab mr create -t t -d d",
+          "gh attestation verify bundle.sig"
         ],
         "allow": [
           "gh pr view 12",
           "gh pr list",
           "gh api repos/o/r",
-          "glab mr view 4"
+          "glab mr view 4",
+          "gh browse"
         ]
       }
     },
@@ -1172,6 +1174,26 @@
       "examples": {
         "ask": [
           "some-tool --run \"git commit -m x\""
+        ]
+      }
+    },
+    {
+      "id": "TRACE-2",
+      "title": "An untraced command is suspicious when configured",
+      "statement": "When the parser cannot trace a command to a git, gh or glab invocation and trace.untracked is ask or deny, the hook MUST answer with that decision, unless every simple command in it is a read-only program.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.1.0",
+      "status": "active",
+      "fix": "Run the git, gh or glab command directly so the hook can trace it, or set trace.untracked to allow.",
+      "examples": {
+        "allow": [
+          "python3 -c 'print(1)'",
+          "ls -la | grep README"
         ]
       }
     },

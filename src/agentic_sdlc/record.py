@@ -16,6 +16,52 @@ from typing import Any
 from . import config as config_mod
 
 RECORD_NAME = "decisions.jsonl"
+PRE_HEAD_NAME = "pre-head.json"
+
+
+def _state_dir(cwd: Path) -> Path | None:
+    common = config_mod.git_common_dir(cwd)
+    return None if common is None else common / "agentic-sdlc"
+
+
+def write_pre_head(cwd: Path, sha: str | None) -> None:
+    """Remember HEAD before a commit command runs (None for an unborn HEAD), so the check
+    after the command can tell whether the commit landed. A failure to write never fails
+    the hook."""
+    folder = _state_dir(cwd)
+    if folder is None:
+        return
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / PRE_HEAD_NAME).write_text(json.dumps({"sha": sha}) + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def read_pre_head(cwd: Path) -> tuple[bool, str | None]:
+    """The stored pre-command HEAD: ``(False, None)`` when nothing is stored, otherwise
+    ``(True, sha)`` with a None sha for an unborn HEAD."""
+    folder = _state_dir(cwd)
+    if folder is None:
+        return False, None
+    try:
+        data = json.loads((folder / PRE_HEAD_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False, None
+    sha = data.get("sha") if isinstance(data, dict) else None
+    return True, sha if isinstance(sha, str) and sha else None
+
+
+def drop_pre_head(cwd: Path) -> None:
+    """Forget the stored pre-command HEAD once it was used, so a stale one cannot misfire on
+    a later, unrelated command."""
+    folder = _state_dir(cwd)
+    if folder is None:
+        return
+    try:
+        (folder / PRE_HEAD_NAME).unlink(missing_ok=True)
+    except OSError:
+        return
 
 
 def record_path(cfg: config_mod.Config, cwd: Path | None) -> Path | None:

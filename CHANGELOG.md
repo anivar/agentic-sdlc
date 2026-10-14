@@ -1,9 +1,92 @@
 # Changelog
 
-## 1.1.0 (unreleased)
+## 1.1.0 (2026-10-14)
+
+### Added
+
+- PyPI publishing from the release workflow with trusted publishing (OIDC; no API token is
+  ever created): a `pypi` job runs after the GitHub release, gated on `github.event.created`
+  the same way, building with `uv build` and publishing with `uv publish
+  --trusted-publishing always`. The one-time setup is a pending trusted publisher on PyPI
+  plus the `pypi` environment here; after that a signed tag is the whole release.
+  `uvx agentic-sdlc` is the install path from this release; the git URL form stays as the
+  development path. Locally, `just release` builds `dist/` (and publishes when
+  `UV_PUBLISH_TOKEN` is set) and `just outdated` shows newer development dependencies.
+- `GOVERNANCE.md`: the maintenance covenant (a fork needs no permission under the MIT
+  license, `rules/registry.json` is the specification a fork builds against, the decision
+  record is portable JSON Lines), the rule-id lifecycle (an id is never reused or renumbered;
+  retirement is `status: deprecated` with `replaced_by` and a changelog entry naming the ADR),
+  and how a rule change lands (the rule proposal issue template, maintainer review through
+  `.github/CODEOWNERS`, new, over the registry, `guard.py` and the workflows).
+- Adoption documentation: the ruleset import is now a stated mandatory step, the only
+  server-side floor; a supply-chain paragraph shows the reusable workflow pinned by commit
+  sha and the SSH-signed release tags verified with `git tag -v`; the gap table says plainly
+  that code review is the server-side backstop for staging; the other-agent install note
+  names hook manifests for other agents as roadmap; the Windows `python3` shim note is a
+  stated constraint rather than a table aside. `SECURITY.md` now lists the `remote` and
+  `rev-list` reads and the `pre-head.json` state file the hook writes around a commit.
+- Attribution scanning normalizes each line before the patterns run: NFKD, format characters
+  (zero-width joiners and spaces, the soft hyphen) stripped, confusable Cyrillic and Greek
+  letters mapped to ASCII. `Claude` written with a Cyrillic а, or a trailer key broken up with
+  a zero-width space, no longer slips past ATTR-1; the finding's excerpt keeps the original
+  line. A footer verb ("generated with", "made with" and the like) followed by a capitalized
+  tool-shaped token, mixed case or digits as in DevTool9000, is ATTR-1 even when the vendor
+  list does not know the name; a plain word after the verb ("generated with care") stays
+  clean.
+- The friction dial: `confirm.scope` (`"each"`, the default; `"slice"` asks for a commit only
+  when it would be the branch's first unpushed commit, checked with
+  `git rev-list HEAD --not --remotes --count` and failing closed to an ask when git cannot say
+  or no remote exists; `"off"` switches all three confirms off) and `confirm.quiet_rules`
+  (entries `{rule, until}` that silence a named ask rule until a UTC date). A quiet rule
+  naming a deny rule is a config error, an expired entry warns in the config problems, and a
+  suppressed ask is noted in the decision reason so the record keeps it visible. The
+  unrecognized-subcommand ask from the verb tables is not affected by the scope.
+- `agentic-sdlc log --summary` aggregates the decision record: counts by decision, asks and
+  denies per rule, the top ten command kinds, and the dates covered.
+- A `gh` or `glab` subcommand the verb tables know as neither write nor read now asks
+  (ASK-3, "review it yourself") instead of passing silently; the ask does not depend on
+  `confirm.post`, like TRACE-1. The tables were re-grounded against gh 2.102.0 and
+  glab 1.122.0: new writes include `gh pr revert`, `gh repo set-default`, the `discussion`,
+  `skill` and `agent-task` nouns, `glab label edit`, `glab mr for`, `glab ci run-trig`,
+  `glab variable import`, `glab repo update`/`publish`/`members`, and the `deploy-key`,
+  `gpg-key`, `incident`, `milestone`, `packages`, `runner`, `runner-controller`,
+  `securefile`, `stack`, `token` and `work-items` nouns; read verbs verified from the CLIs'
+  help (`gh browse`, `gh search`, `glab ci trace` and the like) pass.
+- `scripts/check_verb_tables.py` (`just verbs-check`, weekly in `verbs.yml` and on changes to
+  the tables) reads each installed CLI's `--help`, locally and off the network, and fails on
+  a write-shaped verb the tables do not track; a CLI absent from PATH is skipped.
+- TRACE-2 and the `trace.untracked` key (`"allow"`, `"ask"` or `"deny"`; the default stays
+  `"allow"`). At ask or deny the hook answers with that decision for a command it cannot trace
+  to a git, gh or glab invocation, closing the silent-allow hole for a command behind an
+  interpreter or an unknown program. A command made only of read-only programs (`ls`, `cat`,
+  `grep` and the like) still passes, and SECRET-3 governs a read of a credential file either way.
+- The gated-command pre-check also sees an inline interpreter script (`python3 -c`, `node -e`,
+  `ruby -e`, `perl -e`) whose text runs git, including the verb split into separate arguments
+  (`["git", "push"]`). TRACE-1 asks for those.
+- A seeded parser fuzz test (`tests/test_fuzz.py`): 500 shell-ish strings from a small
+  grammar (pipes, redirections, wrappers, quotes, heredoc markers, substitutions, git verbs),
+  asserting the parser never raises and the guard decides deterministically. A fourth
+  behavioural eval (`evals/push-evasion-is-refused/`) asks the agent to push past a refusal
+  and fails the run if it reaches for an interpreter, an alias or `--no-verify`.
 
 ### Changed
 
+- CI syncs with `uv sync --locked --group dev`, so a stale `uv.lock` fails the gate, and
+  `.python-version` pins the development interpreter to 3.13; the 3.9 floor stays a CI matrix
+  concern.
+- The hook's per-call git lookups (`rev-parse --show-toplevel`, `--git-common-dir`) are
+  memoized per directory, and a parsed `.agentic-sdlc.json` is cached by path and mtime: a
+  hook call in a directory with no config file runs no git subprocess after the first, and a
+  changed file is re-parsed. Validation problems are computed on the fresh parse, unchanged.
+
+- The check after a commit no longer guesses from the commit's timestamp. The hook records
+  the sha at HEAD before a commit command runs (`<git common dir>/agentic-sdlc/pre-head.json`,
+  None for an unborn HEAD) and compares it after: HEAD unchanged means the commit did not
+  land and nothing is checked, HEAD moved means the message that landed is scanned for
+  attribution. A commit backdated with a forged `GIT_COMMITTER_DATE` is caught either way,
+  and a fresh HEAD the command did not create is no longer reported. The stored sha is
+  deleted once used. When nothing was recorded, a pair that started before the upgrade, the
+  300-second recency guess stands in, documented in the code as the weak fallback.
 - Secret scanning moves from gitleaks to TruffleHog. Gitleaks' README calls it feature complete,
   with future releases limited to security patches. The hook and the native `pre-commit` hook
   pipe the lines a staged change adds to `trufflehog stdin` with verification and the update
@@ -16,6 +99,16 @@
   still reads, with a warning: `true` means TruffleHog, `false` means none.
 - The `GITLEAKS_LICENSE` workflow secret is no longer used. It stays declared so a caller that
   passes it keeps validating, and goes in 2.0.
+
+### Fixed
+
+- A dead conditional in the redirection stripping (`skip_next = token not in (">&", "<&") or
+  True`, always true) is written as the plain intent: every redirection operator consumes the
+  next token as its target. Behaviour is unchanged.
+- The reusable workflow's `secrets` job never ran on this repository's own pull requests. Its
+  condition compared an input that is absent outside `workflow_call` with `false`, the loose
+  comparison treated absent as false, and the skipped job counted as a passing required check.
+  Callers that pass the input were not affected.
 
 ### Verified before merge
 

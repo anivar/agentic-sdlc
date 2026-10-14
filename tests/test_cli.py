@@ -198,3 +198,51 @@ def test_frontmatter_parser_handles_folded_description():
     body = "---\nname: x\ndescription: >\n  First line\n  second line.\nlicense: MIT\n---\n\n# X\n"
     fields = cli.parse_frontmatter(body)
     assert fields == {"name": "x", "description": "First line second line.", "license": "MIT"}
+
+
+def test_log_summary_aggregates_the_record(tmp_path: Path, capsys):
+    entries = [
+        {
+            "ts": "2026-10-01T10:00:00+00:00",
+            "event": "PreToolUse",
+            "decision": "allow",
+            "rules": [],
+            "kinds": ["other"],
+        },
+        {
+            "ts": "2026-10-02T10:00:00+00:00",
+            "event": "PreToolUse",
+            "decision": "ask",
+            "rules": ["ASK-1"],
+            "kinds": ["git-commit"],
+        },
+        {
+            "ts": "2026-10-03T10:00:00+00:00",
+            "event": "PreToolUse",
+            "decision": "deny",
+            "rules": ["STAGE-1"],
+            "kinds": ["git-add"],
+        },
+        {
+            "ts": "2026-10-03T11:00:00+00:00",
+            "event": "PreToolUse",
+            "decision": "ask",
+            "rules": ["ASK-1"],
+            "kinds": ["git-commit"],
+        },
+    ]
+    (tmp_path / "decisions.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+    (tmp_path / ".agentic-sdlc.json").write_text(
+        json.dumps({"record": {"path": "decisions.jsonl"}}), encoding="utf-8"
+    )
+    assert run("log", "--dir", str(tmp_path), "--summary") == 0
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "4 decisions: 1 allow, 2 ask, 1 deny"
+    assert "ASK-1" in out and "2 ask" in out and "STAGE-1" in out
+    assert "top kinds: git-commit 2" in out
+    assert "from 2026-10-01 to 2026-10-03" in out
+    # Without --summary the entries print one per line.
+    assert run("log", "--dir", str(tmp_path), "--last", "1") == 0
+    assert len(capsys.readouterr().out.strip().splitlines()) == 1

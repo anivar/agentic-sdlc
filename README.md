@@ -45,7 +45,8 @@ from the registry so the coverage claim is a table, not a sentence.
 or in two steps: `/plugin marketplace add anivar/agentic-sdlc`, then
 `/plugin install agentic-sdlc@agentic-sdlc`. Skills appear as `agentic-sdlc:<name>`.
 
-**Any other agent** (skills only; the hook is Claude Code specific):
+**Any other agent** (skills only; the hook is Claude Code specific, and hook manifests for
+other agents are on the roadmap):
 
 ```bash
 npx skills add anivar/agentic-sdlc -g
@@ -58,7 +59,7 @@ upload is not a supported path.
 **Every agent and every person**, the git hooks, from inside a repository:
 
 ```bash
-uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc hooks install
+uvx agentic-sdlc hooks install
 ```
 
 This copies the package under `.git/` and writes `commit-msg` (ATTR-1, ATTR-2), `pre-commit`
@@ -80,10 +81,14 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 
 | Component | Needs |
 |---|---|
-| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `trufflehog` optional, used when present, with verification and the update check off. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. On Windows, `python3` must resolve to a real executable, not a shim. The hook has a 30 s budget; its own git and TruffleHog calls stay under it |
+| The hook | `python3` 3.9 or newer on `PATH` (the stock macOS interpreter qualifies); `git`; `trufflehog` optional, used when present, with verification and the update check off. The hook fails closed: on a machine where `python3` does not resolve, every Bash tool call is refused until it does or the plugin is disabled. The hook has a 30 s budget; its own git and TruffleHog calls stay under it |
 | The plugin | Claude Code 2.1.211 or newer for the forced prompt in auto mode; 2.1.295 or newer for `onFailure: block` |
 | The CI check | GitHub Actions; `gh` is preinstalled on the runners |
 | The skills | any agent that reads `SKILL.md` |
+
+A constraint, stated plainly rather than as a footnote: on Windows the hook works only where
+`python3` resolves to a real executable rather than the Store shim, and the CI matrix does
+not run Windows, so Windows behaviour is not verified on every change.
 
 ## What is inside
 
@@ -113,8 +118,9 @@ npx skills remove grilling grill-with-docs domain-modeling codebase-design tdd t
 | PUSH-1 | a force push to, or deletion of, a protected branch: **denied** | hook, git `pre-push` hook, ruleset |
 | PUSH-2 | a force push of a tag: **asks**, and says that tag-triggered workflows run again | hook |
 | SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus TruffleHog's detectors when installed, over the added lines only) | hook, git `pre-commit` hook, CI |
-| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. The forced prompt is documented for auto mode. In `bypassPermissions` and `dontAsk`, which cannot prompt, the hook returns a blocking error with the reason instead ([ADR 0005](docs/adr/0005-a-blocking-error-where-no-prompt-is-possible.md)); what each mode does is recorded in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
+| ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. A `gh`/`glab` subcommand the verb tables know as neither write nor read asks too ("review it yourself"), and a weekly CI job diffs the tables against the installed CLIs so a new write verb is caught. The forced prompt is documented for auto mode. In `bypassPermissions` and `dontAsk`, which cannot prompt, the hook returns a blocking error with the reason instead ([ADR 0005](docs/adr/0005-a-blocking-error-where-no-prompt-is-possible.md)); what each mode does is recorded in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
 | TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper): **asks** | hook |
+| TRACE-2 | a command the parser cannot trace at all, when the repository sets `trace.untracked` to ask or deny: **that decision**; a command made only of read-only programs passes | hook |
 | GUARD-1 | `--no-verify` or `commit -n`, a `git -c core.hooksPath=…`, `include.path=…` or alias override on the command line, or `git config` setting those keys: **denied** | hook |
 | GUARD-2 | an edit to `.agentic-sdlc.json`, a git hook, `.claude/settings.json`, `.claude/settings.local.json` or `.pre-commit-config.yaml` through the file tools: **asks** | hook, on Edit, Write and MultiEdit |
 | SECRET-3 | reading, grepping, copying or sending a file that holds credentials by name (`.env` files, private keys, `.netrc`, `.npmrc`, `credentials.json`, PEM and keystore files): **asks** | hook, on Bash, Read and Grep |
@@ -172,11 +178,13 @@ ask: ASK-3
 | A user who sets `disableAllHooks`, or a mod that approves after the hook | the hook is a plugin hook, not a managed one | the CI check; the ruleset |
 | Modes that cannot prompt (`bypassPermissions`, `dontAsk`) | an `ask` has nowhere to go there | the hook returns a blocking error with the reason in those modes; observed in print mode on 2026-10-10 ([`CHANGELOG.md`](CHANGELOG.md)): the block held for the commit, the secret file and the Read tool in both |
 | The interactive prompt under `acceptEdits` and auto | the documentation states the auto-mode behaviour; print mode refuses an ask in both ([`CHANGELOG.md`](CHANGELOG.md)) | recorded once observed interactively; `docs/verification.md` is the procedure |
-| A gated command the parser cannot see: a git call inside an interpreter (`python -c`, `node -e`), behind a shell alias or a variable (`$g push`), or a direct API call with `curl` | the parser follows wrappers, substitutions and `cd`, not program semantics | TRACE-1 asks when the text still names the operation; `posting.extra_commands` can name `curl`; the CI check and the ruleset are the backstops |
-| Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; after the commit ran, the hook reads the message at HEAD and reports a trailer with the instruction to amend; the pull request check scans the resulting commits |
+| A gated command the parser cannot see: a git call inside an interpreter (`python -c`, `node -e`), behind a shell alias or a variable (`$g push`), or a direct API call with `curl` | the parser follows wrappers, substitutions and `cd`, not program semantics | TRACE-1 asks when the text still names the operation, and the pre-check names the inline interpreter shapes; `trace.untracked` at ask or deny closes the hole for everything else the parser cannot trace; `posting.extra_commands` can name `curl`; the CI check and the ruleset are the backstops |
+| Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; after the commit ran, the hook compares HEAD with the sha recorded before the command and reads the message that landed, so a backdated commit is still reported with the instruction to amend (when nothing was recorded, a 300-second timestamp guess stands in as the weak fallback); the pull request check scans the resulting commits |
 | A credential read the parser cannot see: through an interpreter (`python -c 'open(".env")'`), or the whole environment printed (`env`, `printenv`) | SECRET-3 matches file names on the command line and in the file tools, not program semantics | SECRET-2 in the skills (never print a secret); the agent's sandbox |
 | An edit to the guard's own configuration through Bash (`sed -i`, a redirection), or hooks moved through the environment (`GIT_CONFIG_PARAMETERS`) | GUARD-2 watches the file tools; the parser drops redirection targets and environment assignments | the pull request review sees the change; CI and the ruleset do not read the local config |
 | A crash in the hook on the file tools | it carries no `onFailure: block`, by design: a broken guard must not stop every read | the Bash hook keeps `onFailure: block`; the error shows in the transcript |
+| A bulk stage outside the Bash tool (another agent's manifest, a person at a shell) | STAGE-1 lives in the Claude Code hook only; there is no git hook for staging | code review, said plainly: no server-side mechanism refuses a swept-in file |
+| Attribution patterns dodged with look-alike letters or invisible characters | the patterns match ASCII vendor names and trailer keys | each line is normalized before the scan (NFKD, format characters stripped, confusable Cyrillic and Greek mapped to ASCII), and a footer verb followed by any tool-shaped token fires without a known vendor; a script outside the confusable map still evades, and the git hooks and CI scan the same landed text |
 
 ## Why no tool attribution
 
@@ -211,7 +219,10 @@ a default; an absent file means the defaults.
 | `attribution.mode` | `"patterns"`; `"strict"` refuses any vendor mention | ATTR-1, ATTR-2 |
 | `attribution.vendors` | adds to the built-in names | ATTR-1, ATTR-2 |
 | `confirm.commit`, `confirm.push`, `confirm.post` | `true` | ASK-1, ASK-2, ASK-3 |
+| `confirm.scope` | `"each"`; `"slice"` asks for a commit only when it would start the branch's unpushed slice (the push and the post still ask), `"off"` switches all three confirms off | ASK-1 |
+| `confirm.quiet_rules` | `[]`; entries `{rule, until}` silence a named ask rule until a UTC date. A deny rule is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason | the ask rules |
 | `stage.deny_add_all`, `stage.deny_commit_all` | `true` | STAGE-1 |
+| `trace.untracked` | `"allow"`; `"ask"` or `"deny"` answers with that decision for a command the parser cannot trace to git, gh or glab; a command made only of read-only programs still passes | TRACE-2 |
 | `secrets.scan_staged`, `secrets.scanner`, `secrets.extra_patterns` | `true`, `"trufflehog"` (or `"none"`), `[]`; the 1.0 key `use_gitleaks` still reads, with a warning | SECRET-1 |
 | `posting.extra_commands` | `[]`; regular expressions that count as a post | ASK-3 |
 | `record.decisions`, `record.shadow`, `record.path` | `false`, `false`, `<git common dir>/agentic-sdlc/decisions.jsonl`; `AGENTIC_SDLC_RECORD=1` and `AGENTIC_SDLC_SHADOW=1` override for one session | the decision record ([ADR 0006](docs/adr/0006-the-decision-record-holds-a-hash-not-the-command.md)); shadow records and lets every command through |
@@ -245,7 +256,8 @@ a default; an absent file means the defaults.
    leave it out unless the repository wants that. The `secrets` job runs TruffleHog over the
    pull request's commits and fails on a credential that is live or whose check errored; a
    candidate TruffleHog proves dead passes, while the hook, which never verifies, refuses any
-   detector match. No licence is needed.
+   detector match. No licence is needed. A caller that passes `secrets-scan: false` gets a
+   skipped job, which GitHub reports as passing to a required check.
 
 3. Import the ruleset, after editing the required check names to the repository's own:
 
@@ -253,18 +265,44 @@ a default; an absent file means the defaults.
    gh api -X POST repos/<owner>/<repo>/rulesets --input rulesets/main-protected.json
    ```
 
+   This step is not optional. The ruleset is the only mechanism on the server: it refuses
+   force pushes, deletions and pushes that skip review on main, and it holds the change-text
+   and secrets checks as required, whatever happens on any laptop or in any agent session.
+
+Pin the `uses:` line by commit sha, with the tag in a comment for the reader:
+
+```yaml
+uses: anivar/agentic-sdlc/.github/workflows/conventions.yml@<full commit sha> # v1.0.0
+```
+
+A tag can move and a sha cannot; this repository's own workflows pin their actions the same
+way. Release tags carry an SSH signature: `git tag -v v1.0.0` verifies one, with the
+maintainer's key in `gpg.ssh.allowedSignersFile` (SSH signatures need it; without it git
+cannot say whom the signature belongs to).
+
 ### GitLab
 
 The plugin, the skills and the git hooks are forge-neutral. For the merge request check,
 `agentic-sdlc check-mr` reads the predefined `CI_MERGE_REQUEST_*` variables and the commits since
 the merge base; [`gitlab-ci.yml`](skills/setup-conventions/assets/gitlab-ci.yml) is the job to include.
 
+### Tuning friction with data
+
+With `record.decisions` on, `agentic-sdlc log --summary` counts the record: decisions by
+outcome, asks and denies per rule, the top command kinds, over the dates covered. A rule that
+asks every time and is approved every time is a candidate for `confirm.quiet_rules` with an
+expiry date; the entry warns once it expires, so a quiet period cannot run forever unnoticed.
+`confirm.scope: slice` is the coarser dial: a commit asks only when it would be the branch's
+first unpushed commit, and the push and the post still ask because they bound the slice.
+
 ## Try the hook by hand
 
-The CLI ships inside the plugin and is not on PyPI; run it from the repository with `uvx`:
+From 1.1.0 the CLI is on PyPI; `uvx` runs it without an install. For the development version
+at the repository's head instead of the release, use
+`uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc`:
 
 ```bash
-alias agentic-sdlc='uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc'
+alias agentic-sdlc='uvx agentic-sdlc'
 agentic-sdlc guard 'git add -A'
 agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 agentic-sdlc guard 'git push --force origin main'

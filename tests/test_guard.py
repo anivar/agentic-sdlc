@@ -175,4 +175,81 @@ def test_config_problems_are_reported_not_fatal(repo: Path):
 def test_looks_gated_pre_check():
     assert guard.looks_gated("git commit -m x")
     assert guard.looks_gated("gh pr merge 1")
+    assert guard.looks_gated('python3 -c \'import subprocess; subprocess.run(["git", "push"])\'')
+    assert guard.looks_gated('node -e \'require("child_process").execSync("git commit")\'')
     assert not guard.looks_gated("cargo build")
+    assert not guard.looks_gated("python3 -c 'print(1)'")
+    assert not guard.looks_gated("python3 deploy.py")
+
+
+def test_quiet_rules_suppress_an_ask_and_say_so(repo: Path):
+    cfg = config_mod.from_dict(
+        {
+            "confirm": {"quiet_rules": [{"rule": "ASK-1", "until": "2999-01-01"}]},
+            "secrets": {"scanner": "none"},
+        }
+    )
+    decision = guard.decide('git commit -m "x"', repo, cfg)
+    assert decision.permission == "allow"
+    assert "suppressed by confirm.quiet_rules until 2999-01-01" in decision.reason
+    # A quieted ASK-1 does not touch the other ask rules.
+    decision = guard.decide("git push origin main", repo, cfg)
+    assert decision.permission == "ask" and "ASK-2" in decision.rules
+
+
+def test_quiet_rules_reject_deny_unknown_and_bad_entries():
+    cfg = config_mod.from_dict(
+        {"confirm": {"quiet_rules": [{"rule": "STAGE-1", "until": "2999-01-01"}]}}
+    )
+    assert cfg.quiet_rules == []
+    assert any("cannot suppress deny rule STAGE-1" in p for p in cfg.problems)
+    cfg = config_mod.from_dict(
+        {"confirm": {"quiet_rules": [{"rule": "NOPE-9", "until": "2999-01-01"}]}}
+    )
+    assert any("unknown rule NOPE-9" in p for p in cfg.problems)
+    cfg = config_mod.from_dict({"confirm": {"quiet_rules": [{"rule": "ASK-1", "until": "soon"}]}})
+    assert any("YYYY-MM-DD" in p for p in cfg.problems)
+    cfg = config_mod.from_dict({"confirm": {"quiet_rules": ["ASK-1"]}})
+    assert any("must be objects" in p for p in cfg.problems)
+    cfg = config_mod.from_dict({"confirm": {"scope": "loud"}})
+    assert cfg.confirm_scope == "each" and any("confirm.scope" in p for p in cfg.problems)
+
+
+def test_an_expired_quiet_rule_warns_and_does_not_suppress(repo: Path):
+    cfg = config_mod.from_dict(
+        {
+            "confirm": {"quiet_rules": [{"rule": "ASK-1", "until": "2020-01-01"}]},
+            "secrets": {"scanner": "none"},
+        }
+    )
+    assert any("expired on 2020-01-01" in p for p in cfg.problems)
+    decision = guard.decide('git commit -m "x"', repo, cfg)
+    assert decision.permission == "ask" and "ASK-1" in decision.rules
+
+
+def test_scope_off_switches_off_all_confirms(repo: Path):
+    cfg = config_mod.from_dict({"confirm": {"scope": "off"}, "secrets": {"scanner": "none"}})
+    assert not (cfg.confirm_commit or cfg.confirm_push or cfg.confirm_post)
+    assert guard.decide('git commit -m "x"', repo, cfg).permission == "allow"
+    assert guard.decide("git push origin main", repo, cfg).permission == "allow"
+
+
+def test_scope_slice_asks_for_the_first_unpushed_commit_only(repo: Path):
+    cfg = config_mod.from_dict({"confirm": {"scope": "slice"}, "secrets": {"scanner": "none"}})
+    # No remote configured: the doubt fails closed and the commit asks.
+    assert guard.decide('git commit -m "x"', repo, cfg).permission == "ask"
+    git(repo, "remote", "add", "origin", "https://example.invalid/repo.git")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    # Everything on HEAD is on the remote: the next commit starts the slice and asks.
+    assert guard.decide('git commit -m "x"', repo, cfg).permission == "ask"
+    (repo / "a.txt").write_text("a\n", encoding="utf-8")
+    git(repo, "add", "a.txt")
+    git(repo, "commit", "-q", "-m", "Add a")
+    # One unpushed commit already: the slice continues, no ask. The push still asks.
+    assert guard.decide('git commit -m "y"', repo, cfg).permission == "allow"
+    assert guard.decide("git push origin main", repo, cfg).permission == "ask"
+
+
+def test_first_unpushed_fails_closed(tmp_path: Path):
+    assert guard.first_unpushed(tmp_path / "not-a-repo")
+    assert guard.first_unpushed(None)

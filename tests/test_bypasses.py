@@ -97,6 +97,58 @@ def test_untraceable_gated_commands_ask(repo: Path):
         assert decision.permission == "ask" and decision.rules == ["TRACE-1"], raw
 
 
+def _untracked(value: str) -> config_mod.Config:
+    return config_mod.from_dict({"trace": {"untracked": value}, "secrets": {"scanner": "none"}})
+
+
+def test_untraced_commands_follow_trace_untracked(repo: Path):
+    raw = "python3 deploy.py"
+    assert guard.decide(raw, repo, NO_SCANNER).permission == "allow"
+    decision = guard.decide(raw, repo, _untracked("ask"))
+    assert decision.permission == "ask" and decision.rules == ["TRACE-2"]
+    decision = guard.decide(raw, repo, _untracked("deny"))
+    assert decision.permission == "deny" and decision.rules == ["TRACE-2"]
+    assert "Fix:" in decision.reason
+
+
+def test_read_only_untraced_commands_pass_under_trace_untracked(repo: Path):
+    for raw in (
+        "ls -la",
+        "echo hi | grep h | sort | uniq",
+        "pwd && date",
+        "find . -name '*.py' | wc -l",
+        "test -f README.md && true",
+    ):
+        assert guard.decide(raw, repo, _untracked("deny")).permission == "allow", raw
+    decision = guard.decide("ls && make deploy", repo, _untracked("deny"))
+    assert decision.permission == "deny" and "TRACE-2" in decision.rules
+
+
+def test_trace_1_still_fires_beside_trace_2(repo: Path):
+    decision = guard.decide('some-tool --run "git commit -m x"', repo, _untracked("deny"))
+    assert decision.permission == "deny"
+    assert "TRACE-1" in decision.rules and "TRACE-2" in decision.rules
+
+
+def test_trace_untracked_rejects_a_bad_value():
+    cfg = config_mod.from_dict({"trace": {"untracked": "yolo"}})
+    assert cfg.trace_untracked == "allow"
+    assert any("trace.untracked" in problem for problem in cfg.problems)
+
+
+def test_interpreter_evasion_hints_are_gated(repo: Path):
+    for raw in (
+        'python3 -c \'import subprocess; subprocess.run(["git", "push"])\'',
+        "node -e \"require('child_process').execSync('git commit')\"",
+        'ruby -e \'system("git", "push")\'',
+        'perl -e \'system "git", "add", "."\'',
+    ):
+        decision = guard.decide(raw, repo, NO_SCANNER)
+        assert decision.permission == "ask" and "TRACE-1" in decision.rules, raw
+    # An inline script that never names git stays allowed.
+    assert guard.decide("python3 -c 'print(1)'", repo, NO_SCANNER).permission == "allow"
+
+
 def test_traced_reads_do_not_trigger_trace(repo: Path):
     for raw in ("gh pr view 12", "git log --oneline", "grep -r TODO src/"):
         assert guard.decide(raw, repo, NO_SCANNER).permission == "allow", raw

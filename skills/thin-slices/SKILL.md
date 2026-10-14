@@ -16,7 +16,7 @@ metadata:
   version: 1.0.0
   tags: implementation, git, pull-requests, staging, secrets, incremental
   derived_from: incremental-implementation (addyosmani/agent-skills, MIT) for the slice cycle and scope discipline; the git, secret and go-ahead rules are the author's own
-  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 SECRET-3 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 GUARD-1 REVIEW-6 TEST-5 ATTR-1 TICKET-3 TICKET-4
+  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 SECRET-3 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 TRACE-2 GUARD-1 REVIEW-6 TEST-5 ATTR-1 TICKET-3 TICKET-4
 ---
 
 # Thin slices
@@ -46,6 +46,7 @@ that keep a change small enough to review.
 | REVIEW-6 | Confirm the diff is absent before merging | And re-diff a conflict resolution against the target's current file. |
 | TEST-5 | Gate on exit codes | `check && test`, then the commit on its go-ahead, gated on the exit codes. |
 | TRACE-1 | An untraceable gated command is confirmed | Hook: a command that mentions a commit, push, bulk add or forge write the parser cannot trace (a variable, an interpreter, an unusual wrapper) asks. |
+| TRACE-2 | An untraced command is suspicious when configured | Hook: with `trace.untracked` at ask or deny, a command the parser cannot trace to git, gh or glab gets that decision; a command made only of read-only programs passes. |
 
 ## The cycle
 

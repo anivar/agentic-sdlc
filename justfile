@@ -35,6 +35,10 @@ coverage:
 coverage-check:
     uv run agentic-sdlc coverage --check
 
+# Compare the gh/glab verb tables with the installed CLIs (local --help only, no network).
+verbs-check:
+    uv run python scripts/check_verb_tables.py
+
 plugin:
     claude plugin validate --strict .
 
@@ -53,3 +57,13 @@ guard cmd:
 # Feed the hook the event Claude Code would send for a command, from this directory.
 hook-try cmd:
     printf '%s' '{"tool_name":"Bash","tool_input":{"command":{{cmd}}},"cwd":"{{justfile_directory()}}"}' | python3 src/agentic_sdlc/hook.py; echo " (exit $?)"
+
+# Build the distribution. The normal publish path is the signed tag: release.yml publishes
+# with trusted publishing, no token. With UV_PUBLISH_TOKEN set, this publishes directly.
+release:
+    uv build
+    if [ -n "${UV_PUBLISH_TOKEN:-}" ]; then uv publish; else echo "dist/ is built; push a signed v* tag and the release workflow publishes to PyPI"; fi
+
+# Newer versions of the development dependencies, if any.
+outdated:
+    uv tree --outdated

@@ -1,6 +1,6 @@
 [project]
 name = "agentic-sdlc"
-version = "1.0.0"
+version = "1.1.0"
 description = "Agent skills and non-negotiable checks for a software delivery process run with coding agents: evidence-tagged claims, reviewable slices, a confirmed commit and push, no tool attribution, no key-shaped literals."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -121,3 +121,26 @@ def test_voice_evidence_words_ignore_quotes_and_verb_uses():
 def test_voice_skips_code_blocks():
     sample = "```\nseamless — robust\n```\nPlain sentence.\n"
     assert text.voice_findings(sample) == []
+
+
+def test_homoglyph_and_zero_width_evasion_are_caught():
+    samples = [
+        "Co-Authored-By: Clаude",  # Cyrillic а
+        "Co-Auth​ored-By: Claude",  # zero-width space in the trailer key
+        "Generated with Clαude",  # Greek alpha
+        "Co-Authored-By: Claude​",  # zero-width space after the name
+    ]
+    for sample in samples:
+        assert rules(text.attribution_findings(sample)) == ["ATTR-1"], repr(sample)
+    # The excerpt keeps the original line, so the report shows what was really written.
+    found = text.attribution_findings("Co-Authored-By: Clаude")
+    assert "а" in found[0].excerpt
+
+
+def test_tool_named_footer_fires_without_a_known_vendor():
+    assert rules(text.attribution_findings("Generated with DevTool9000")) == ["ATTR-1"]
+    assert rules(text.attribution_findings("made using DeepSeek-R1")) == ["ATTR-1"]
+    # A plain word after the verb is not a product name.
+    assert text.attribution_findings("generated with care") == []
+    assert text.attribution_findings("Written with Rust and patience") == []
+    assert text.attribution_findings("Composed with Emacs") == []

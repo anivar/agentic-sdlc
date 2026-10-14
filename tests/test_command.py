@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from agentic_sdlc import command as command_mod
+from agentic_sdlc import config as config_mod
+from agentic_sdlc import guard
+
+NO_SCANNER = config_mod.from_dict({"secrets": {"scanner": "none"}})
 
 
 def one(raw: str, cwd: Path | None = None):
@@ -175,3 +179,46 @@ def test_extra_posting_patterns():
         "curl -X POST https://hooks.example/notify", extra_posting=[r"^curl .*-X POST"]
     )
     assert parsed.commands[0].post
+
+
+def test_unrecognized_verbs_flag_and_ask(repo: Path):
+    for raw in (
+        "gh pr frobnicate 12",
+        "glab mr frobnicate 4",
+        "gh attestation verify bundle.sig",
+    ):
+        facts = one(raw)
+        assert facts.unrecognized_verb and not facts.post, raw
+        decision = guard.decide(raw, repo, NO_SCANNER)
+        assert decision.permission == "ask" and "ASK-3" in decision.rules, raw
+    assert "review it yourself" in guard.decide("gh pr frobnicate 12", repo, NO_SCANNER).reason
+
+
+def test_known_read_verbs_neither_post_nor_ask(repo: Path):
+    for raw in (
+        "gh browse",
+        "gh search repos agentic",
+        "gh pr checks 12",
+        "gh repo clone o/r",
+        "glab mr diff 4",
+        "glab ci trace 1",
+    ):
+        facts = one(raw)
+        assert not facts.unrecognized_verb and not facts.post, raw
+        assert guard.decide(raw, repo, NO_SCANNER).permission == "allow", raw
+
+
+def test_new_write_verbs_are_posts():
+    assert one("gh pr revert 12").post
+    assert one("gh repo set-default main").post
+    assert one("gh discussion create -t t -b b").post
+    assert one("glab repo update --description d").post
+    assert one("glab token create maintainer").post
+
+
+def test_gh_and_glab_api_special_cases_are_unaffected():
+    assert not one("gh api repos/x/y").post
+    assert not one("gh api repos/x/y").unrecognized_verb
+    assert not one("glab api projects/1").unrecognized_verb
+    facts = one("gh api -X DELETE repos/x/y/labels/bug")
+    assert facts.post and not facts.unrecognized_verb

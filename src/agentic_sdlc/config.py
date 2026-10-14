@@ -10,11 +10,15 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import registry
+
 CONFIG_NAME = ".agentic-sdlc.json"
 SCANNERS = ("trufflehog", "none")
+CONFIRM_SCOPES = ("each", "slice", "off")
 
 # Names that identify a tool when they appear inside a trailer, a footer or a sign-off.
 # Wide on purpose: in that position a match is unambiguous.
@@ -95,6 +99,8 @@ class Config:
     confirm_commit: bool = True
     confirm_push: bool = True
     confirm_post: bool = True
+    confirm_scope: str = "each"
+    quiet_rules: list[dict[str, Any]] = field(default_factory=list)
     deny_add_all: bool = True
     deny_commit_all: bool = True
     scan_staged: bool = True
@@ -104,6 +110,7 @@ class Config:
     record_decisions: bool = False
     record_shadow: bool = False
     record_path: str = ""
+    trace_untracked: str = "allow"
     source: Path | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -152,6 +159,7 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         "secrets",
         "posting",
         "record",
+        "trace",
     }
     for key in data:
         if key not in known_top:
@@ -188,8 +196,33 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         cfg.confirm_commit = _flag(confirm, "commit", True, problems, "confirm")
         cfg.confirm_push = _flag(confirm, "push", True, problems, "confirm")
         cfg.confirm_post = _flag(confirm, "post", True, problems, "confirm")
+        scope = confirm.get("scope", "each")
+        if scope in CONFIRM_SCOPES:
+            cfg.confirm_scope = scope
+        else:
+            problems.append("confirm.scope must be each, slice or off")
+        quiet = confirm.get("quiet_rules", [])
+        if isinstance(quiet, list):
+            for entry in quiet:
+                parsed_entry = _quiet_rule(entry, problems)
+                if parsed_entry is not None:
+                    cfg.quiet_rules.append(parsed_entry)
+        else:
+            problems.append("confirm.quiet_rules must be an array of {rule, until} objects")
     else:
         problems.append("confirm must be an object")
+    if cfg.confirm_scope == "off":
+        cfg.confirm_commit = cfg.confirm_push = cfg.confirm_post = False
+
+    trace = data.get("trace") or {}
+    if isinstance(trace, dict):
+        untracked = trace.get("untracked", "allow")
+        if untracked in ("allow", "ask", "deny"):
+            cfg.trace_untracked = untracked
+        else:
+            problems.append("trace.untracked must be allow, ask or deny")
+    else:
+        problems.append("trace must be an object")
 
     stage = data.get("stage") or {}
     if isinstance(stage, dict):
@@ -244,6 +277,37 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
     return cfg
 
 
+def _quiet_rule(entry: Any, problems: list[str]) -> dict[str, Any] | None:
+    """One quiet_rules entry as {"rule": id, "until": date}, or None with a problem noted.
+    Only an ask rule can be quieted; an expired entry is kept but warns, so a quiet period
+    cannot silently run forever."""
+    if not isinstance(entry, dict):
+        problems.append("confirm.quiet_rules entries must be objects with rule and until")
+        return None
+    rule, until = entry.get("rule"), entry.get("until")
+    if not isinstance(rule, str) or not isinstance(until, str):
+        problems.append("confirm.quiet_rules entries need a rule id and an until date")
+        return None
+    known = registry.by_id()
+    if rule not in known:
+        problems.append(f"confirm.quiet_rules names unknown rule {rule}")
+        return None
+    if known[rule].get("decision") == "deny":
+        problems.append(f"confirm.quiet_rules cannot suppress deny rule {rule}")
+        return None
+    if known[rule].get("decision") != "ask":
+        problems.append(f"confirm.quiet_rules rule {rule} is not an ask rule")
+        return None
+    try:
+        until_date = date.fromisoformat(until)
+    except ValueError:
+        problems.append(f"confirm.quiet_rules until must be a YYYY-MM-DD date, got {until!r}")
+        return None
+    if until_date < datetime.now(timezone.utc).date():
+        problems.append(f"confirm.quiet_rules entry for {rule} expired on {until_date}")
+    return {"rule": rule, "until": until_date}
+
+
 def _flag(obj: dict[str, Any], key: str, default: bool, problems: list[str], section: str) -> bool:
     value = obj.get(key, default)
     if isinstance(value, bool):
@@ -291,25 +355,53 @@ def _git_line(cwd: Path, *args: str) -> str | None:
     return line or None
 
 
+# Per-directory answers to the two git path queries, and parsed configs by (path, mtime).
+# Both are pure per-repository facts; a hook process asks them on every Bash call.
+_TOPLEVEL_CACHE: dict[Path, Path | None] = {}
+_COMMON_DIR_CACHE: dict[Path, Path | None] = {}
+_CONFIG_CACHE: dict[Path, tuple[float, Config]] = {}
+
+
 def git_toplevel(cwd: Path) -> Path | None:
-    line = _git_line(cwd, "rev-parse", "--show-toplevel")
-    return Path(line) if line else None
+    if cwd not in _TOPLEVEL_CACHE:
+        line = _git_line(cwd, "rev-parse", "--show-toplevel")
+        _TOPLEVEL_CACHE[cwd] = Path(line) if line else None
+    return _TOPLEVEL_CACHE[cwd]
 
 
 def git_common_dir(cwd: Path) -> Path | None:
     """The common git directory: `.git`, or the main repository's for a worktree."""
-    line = _git_line(cwd, "rev-parse", "--git-common-dir")
-    if not line:
-        return None
-    path = Path(line)
-    return (path if path.is_absolute() else cwd / path).resolve()
+    if cwd not in _COMMON_DIR_CACHE:
+        line = _git_line(cwd, "rev-parse", "--git-common-dir")
+        path = Path(line) if line else None
+        _COMMON_DIR_CACHE[cwd] = (
+            (path if path.is_absolute() else cwd / path).resolve() if path else None
+        )
+    return _COMMON_DIR_CACHE[cwd]
 
 
 def load(cwd: Path) -> Config:
-    """Config for a working directory: the nearest file, or the defaults."""
+    """Config for a working directory: the nearest file, or the defaults. The parsed Config
+    is cached by the file's path and mtime, so a hook call re-parses only after the file
+    changed; a directory with no config file costs no subprocess after the first lookup."""
     path = find_config_file(cwd)
     if path is None:
         return Config()
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    if mtime is not None:
+        cached = _CONFIG_CACHE.get(path)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+    cfg = _parse_file(path)
+    if mtime is not None:
+        _CONFIG_CACHE[path] = (mtime, cfg)
+    return cfg
+
+
+def _parse_file(path: Path) -> Config:
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)

@@ -206,6 +206,7 @@ def test_file_tools_through_the_hook(repo: Path):
 
 
 def test_post_commit_check_catches_what_landed(repo: Path):
+    """No recorded pre-command HEAD: the recency fallback still catches a fresh commit."""
     write_config(repo, {})
     (repo / "a.txt").write_text("a\n", encoding="utf-8")
     git(repo, "add", "a.txt")
@@ -223,31 +224,71 @@ def test_post_commit_check_catches_what_landed(repo: Path):
     assert code == 0
 
 
-def test_post_commit_check_ignores_an_old_head(repo: Path):
-    """A failed commit leaves HEAD where it was; an old HEAD with attribution is not reported."""
-    write_config(repo, {})
-    (repo / "old.txt").write_text("old\n", encoding="utf-8")
-    git(repo, "add", "old.txt")
+def commit_backdated(repo: Path, *message: str) -> None:
     env = dict(
         os.environ,
         GIT_COMMITTER_DATE="2020-01-01T00:00:00Z",
         GIT_AUTHOR_DATE="2020-01-01T00:00:00Z",
     )
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo),
-            "commit",
-            "-q",
-            "-m",
-            "Old",
-            "-m",
-            "Co-Authored-By: Claude <noreply@anthropic.com>",
-        ],
-        check=True,
-        env=env,
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", *message], check=True, env=env)
+
+
+def test_post_commit_check_catches_a_backdated_commit(repo: Path):
+    """The recorded pre-command HEAD replaces the timestamp guess: a commit backdated with
+    GIT_COMMITTER_DATE is still checked, where the recency fallback would skip it."""
+    write_config(repo, {})
+    code, _, _ = run_hook(bash_event('git commit -m "Add a" -m "$(cat trailer.txt)"', repo))
+    assert code == 0  # the ASK-1 ask; the user then lets the command run
+    (repo / "a.txt").write_text("a\n", encoding="utf-8")
+    git(repo, "add", "a.txt")
+    commit_backdated(repo, "-m", "Add a", "-m", "Co-Authored-By: Claude <noreply@anthropic.com>")
+    code, out, err = run_hook(
+        bash_event('git commit -m "Add a" -m "$(cat trailer.txt)"', repo), post=True
     )
+    assert code == 2 and "ATTR-1" in err and "amend" in err
+    # The stored sha was consumed: a stale file cannot misfire on a later command.
+    assert not (repo / ".git" / "agentic-sdlc" / "pre-head.json").exists()
+
+
+def test_post_commit_check_returns_when_head_did_not_move(repo: Path):
+    """HEAD equals the recorded sha, so the commit did not land; a fresh HEAD carrying
+    attribution is not reported (the recency fallback would report it)."""
+    write_config(repo, {})
+    (repo / "a.txt").write_text("a\n", encoding="utf-8")
+    git(repo, "add", "a.txt")
+    git(repo, "commit", "-q", "-m", "Add a", "-m", "Co-Authored-By: Claude <noreply@anthropic.com>")
+    run_hook(bash_event('git commit -m "more"', repo))
+    code, out, err = run_hook(bash_event('git commit -m "more"', repo), post=True)
+    assert code == 0 and err == ""
+
+
+def test_post_commit_check_covers_a_first_commit(tmp_path: Path):
+    """An unborn HEAD is recorded as None; a first commit moves HEAD from nothing to
+    something and is checked."""
+    repo = tmp_path / "fresh"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "config", "commit.gpgsign", "false")
+    write_config(repo, {})
+    run_hook(bash_event('git commit -m "init" -m "$(cat trailer.txt)"', repo))
+    (repo / "a.txt").write_text("a\n", encoding="utf-8")
+    git(repo, "add", "a.txt")
+    git(repo, "commit", "-q", "-m", "init", "-m", "Co-Authored-By: Claude <noreply@anthropic.com>")
+    code, out, err = run_hook(
+        bash_event('git commit -m "init" -m "$(cat trailer.txt)"', repo), post=True
+    )
+    assert code == 2 and "ATTR-1" in err
+
+
+def test_post_commit_check_ignores_an_old_head(repo: Path):
+    """The recency fallback (no recorded pre-command HEAD): a failed commit leaves HEAD where
+    it was; an old HEAD with attribution is not reported."""
+    write_config(repo, {})
+    (repo / "old.txt").write_text("old\n", encoding="utf-8")
+    git(repo, "add", "old.txt")
+    commit_backdated(repo, "-m", "Old", "-m", "Co-Authored-By: Claude <noreply@anthropic.com>")
     code, out, err = run_hook(bash_event('git commit -m "Nothing staged"', repo), post=True)
     assert code == 0 and err == ""
 
@@ -278,3 +319,64 @@ def test_config_schema_documents_record():
         )
     )
     assert set(schema["properties"]["record"]["properties"]) == {"decisions", "shadow", "path"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="posix paths")
+def test_config_schema_documents_trace():
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas" / "config.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(schema["properties"]["trace"]["properties"]) == {"untracked"}
+    assert schema["properties"]["trace"]["properties"]["untracked"]["enum"] == [
+        "allow",
+        "ask",
+        "deny",
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="posix paths")
+def test_config_schema_documents_confirm():
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas" / "config.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    confirm = schema["properties"]["confirm"]["properties"]
+    assert set(confirm) == {"commit", "push", "post", "scope", "quiet_rules"}
+    assert confirm["scope"]["enum"] == ["each", "slice", "off"]
+    item = confirm["quiet_rules"]["items"]
+    assert item["required"] == ["rule", "until"]
+
+
+def test_load_caches_git_lookups_and_revalidates_on_mtime(repo: Path, monkeypatch):
+    write_config(repo, {"confirm": {"commit": True}})
+    first = config_mod.load(repo)
+    assert first.confirm_commit is True
+    # The second load answers from the caches: any git subprocess is a failure.
+    monkeypatch.setattr(
+        config_mod,
+        "_git_line",
+        lambda *a: (_ for _ in ()).throw(AssertionError("git subprocess after first load")),
+    )
+    assert config_mod.load(repo).confirm_commit is True
+    # A changed file (new mtime) is re-parsed, still without a git subprocess.
+    write_config(repo, {"confirm": {"commit": False}})
+    config_file = repo / ".agentic-sdlc.json"
+    bumped = config_file.stat().st_mtime + 2
+    os.utime(config_file, (bumped, bumped))
+    reloaded = config_mod.load(repo)
+    assert reloaded.confirm_commit is False
+
+
+def test_load_without_a_config_file_runs_git_once(tmp_path: Path, monkeypatch):
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    assert config_mod.load(bare).problems == []
+    monkeypatch.setattr(
+        config_mod,
+        "_git_line",
+        lambda *a: (_ for _ in ()).throw(AssertionError("git subprocess after first load")),
+    )
+    assert config_mod.load(bare).problems == []

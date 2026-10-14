@@ -1,0 +1,4 @@
+# The maintainer reviews changes to the rules, the decision code and the workflows.
+/rules/ @anivar
+/src/agentic_sdlc/guard.py @anivar
+/.github/workflows/ @anivar
