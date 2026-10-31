@@ -27,6 +27,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Refuse a tag that differs from the shipped versions
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          package="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)"
+          plugin="$(jq -r '.version // empty' .claude-plugin/plugin.json)"
+          if [ "$package" != "$version" ] || [ "$plugin" != "$version" ]; then
+            echo "::error::tag $version, pyproject.toml $package, .claude-plugin/plugin.json $plugin: all three must agree"
+            exit 1
+          fi
       - name: Take the CHANGELOG section for this tag
         id: notes
         run: |

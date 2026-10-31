@@ -1,7 +1,7 @@
 {
   "name": "agentic-sdlc",
   "displayName": "Agentic SDLC",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Skills for a delivery process run with coding agents (evidence-tagged claims, plans with gates, reviewable slices, test-first, reviews in Conventional Comments) plus a PreToolUse hook that refuses tool attribution, bulk staging, force-pushes to protected branches and key-shaped literals, and asks before every commit, push and post.",
   "author": {
     "name": "Anivar Aravind",

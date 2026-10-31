@@ -34,6 +34,15 @@ This release breaks existing behaviour: the guard's default is agent mode
 - Registry: `record` as a hook decision, and the `examples_unattended` and `examples_agent`
   example sets, each decided as written on every `just check`.
 
+### Fixed
+
+- `.claude-plugin/plugin.json` carried `"version": "1.0.0"` through the 1.1.0 release. Claude
+  Code keys an installed plugin's cache on that string, so a copy installed from the marketplace
+  stayed on the 1.0.0 files and never received the 1.1.0 hook and skill changes. The manifest now
+  carries the release version. `tests/test_manifests.py` fails when the manifest version and the
+  `pyproject.toml` version differ, and `release.yml` refuses a tag that differs from either
+  before it writes the release or publishes to PyPI.
+
 ### Verified
 
 - Print-mode runs with Claude Code, 2026-11-22: the confirm-mode unattended rows of
