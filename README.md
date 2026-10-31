@@ -100,8 +100,8 @@ not run Windows, so Windows behaviour is not verified on every change.
 |---|---|---|
 | `evidence` | Calibrate every claim: Verified, Measured, Inferred, Planned; verify at the production sha; agent output is a lead; read sources in full; compute a headline number twice; sweep after one defect | EVID-1 to EVID-10 |
 | `plain-voice` | The decision first, current state only, open points left open, misses in the headline, no rhetorical structure, no dashes as punctuation, no tool attribution | VOICE-1 to VOICE-13, ATTR-1, ATTR-2 |
-| `review-change` | Findings on the introducing change at its head sha, one per thread in Conventional Comments, a summary that ends in a decision, a mutation check before trusting a test, an adversarial read of your own work | REVIEW-1 to REVIEW-10 |
-| `plan-project` | One plan file: outcome with measures, decisions as options, assumptions tied to tests, dated steps with done-when, gates, risks, rollout, cut order; the turn ends after the plan | PLAN-1 to PLAN-9 |
+| `review-change` | Findings on the introducing change at its head sha, one per thread in Conventional Comments, a summary that ends in a decision, a mutation check before trusting a test, an adversarial read of your own work, a fresh-context reader for a plan or design you drafted, one answer per finding | REVIEW-1 to REVIEW-12 |
+| `plan-project` | One plan file: outcome with measures, decisions as options, assumptions tied to tests, dated steps with done-when, gates, risks, rollout, cut order; compared with the ask before it is shown; the turn ends after the plan | PLAN-1 to PLAN-10 |
 | `grill-plan` | Rounds of numbered questions over the settled frontier, each with a recommended answer; facts looked up, decisions put to the decider | GRILL-1 to GRILL-3 |
 | `decision-records` | Glossary, decision records and dated research documents, as tables with calibration, naming systems and roles, never people | DECIDE-1 to DECIDE-6 |
 | `cut-tickets` | One ticket per real work item with acceptance and blockers, no identifiers or names, full links, published only after approval | TICKET-1 to TICKET-6 |

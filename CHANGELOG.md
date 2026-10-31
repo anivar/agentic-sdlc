@@ -33,6 +33,39 @@ This release breaks existing behaviour: the guard's default is agent mode
   session takes one feature and ends with a checkpoint commit.
 - Registry: `record` as a hook decision, and the `examples_unattended` and `examples_agent`
   example sets, each decided as written on every `just check`.
+- REVIEW-11: before a plan or design the agent drafted goes to the decider for approval, one
+  fresh reader reads it: a subagent that has the document (its path, or its text verbatim when it
+  exists only in the conversation), the decider's ask verbatim, and the repository, and nothing
+  else from the drafting conversation. The reader paraphrases the document before any finding,
+  and a paraphrase that differs from the intent is a finding against the document. It checks each
+  claim that something exists now, treats a contradiction as blocking and a proposed file as no
+  finding, lists each claim it could not open as not checked, and lists the decisions an
+  implementer would have to make that the document does not record; in a plan those become open
+  Decisions rows (PLAN-7). More than one reader needs the decider's agreement; with no subagent,
+  or after two failures, the review is reported as a self-review only. The brief to hand over is
+  `skills/review-change/references/fresh-reader.md`.
+- REVIEW-12: every finding on the author's own work gets one answer: fixed, accepted with the
+  change proposed, refuted with evidence the reviewer could have read, given to the decider when
+  the evidence lies outside the reviewer's reach, or declined in one line (a nitpick, or a
+  cosmetic bot suggestion as REVIEW-5 already allows). A comprehension gap is never refuted and
+  the author never changes a label or decoration. Every answer goes in front of the decider, so a
+  reviewer's point stays open until the decider has seen it (VOICE-9); a refutation the decider
+  did not overrule stays settled across rounds, a fixed finding raised again re-opens, and a
+  reviewer that returned nothing is reported as not run. REVIEW-5's statement is unchanged; its
+  "refuted with evidence" now means what REVIEW-12 defines, and a bot thread given to the decider
+  stays unresolved until the decider answers.
+- PLAN-10: before a plan is shown it is compared with the ask and each contradiction is quoted on
+  both sides. A slip is corrected to match the ask; a deliberate departure becomes a Decisions row
+  with who decides and by when (PLAN-7). An addition that changes an interface, a dependency or
+  what ships is listed.
+- `evals/draft-goes-to-a-fresh-reader/`: given a plan with a planted contradiction (limits per
+  key, counting per IP), the agent hands the text to a reader inside `BEGIN DOCUMENT` markers,
+  reports the paraphrase, the unrecorded decisions and the findings, and answers each finding
+  without claiming a fix it was not allowed to make.
+- These three rules restate ideas from the Elephant-Goldfish Model
+  (google/elephant-goldfish-model, Apache-2.0) in this repository's words; the registry notes say
+  so on each rule. Its multi-stage reviewer swarm, personas and unranked-options rule are not
+  taken: one reader is the default, and grill-plan keeps its recommended answer.
 
 ### Fixed
 

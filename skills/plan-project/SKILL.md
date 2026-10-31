@@ -16,8 +16,8 @@ metadata:
   author_url: https://anivar.net
   version: 1.0.0
   tags: planning, specification, assumptions, gates, rollout, decisions
-  derived_from: spec-driven-development (addyosmani/agent-skills, MIT) for the human review gate between phases and the assumption list; the template and the decider profile are the author's own
-  rules: PLAN-1 PLAN-2 PLAN-3 PLAN-4 PLAN-5 PLAN-6 PLAN-7 PLAN-8 PLAN-9 EVID-1 VOICE-2 VOICE-8 VOICE-9 VOICE-13 GRILL-3 REVIEW-7
+  derived_from: spec-driven-development (addyosmani/agent-skills, MIT) for the human review gate between phases and the assumption list; the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0) for comparing the plan with the ask, restated without its text; the template and the decider profile are the author's own
+  rules: PLAN-1 PLAN-2 PLAN-3 PLAN-4 PLAN-5 PLAN-6 PLAN-7 PLAN-8 PLAN-9 PLAN-10 EVID-1 VOICE-2 VOICE-8 VOICE-9 VOICE-13 GRILL-3 REVIEW-7 REVIEW-11
 ---
 
 # Plan a project
@@ -88,6 +88,7 @@ Cut in this order: <list>. Never cut: <list>.
 | PLAN-7 | Decisions in the decider's words | Options in the table; the decision recorded in the decider's own words, with who decides and by when. The decider approves; each delivery step names a team or role as its owner. |
 | PLAN-8 | Newest production version | Check what the platform runs in production, then decide. Never design on a beta; never choose an older version to stay compatible with something not in production. |
 | PLAN-9 | Platform changes prove out on staging | Validated there before production. |
+| PLAN-10 | Reconcile the plan with the ask | Read the ask again next to the plan and quote both texts wherever they contradict. Correct a slip in the plan to match the ask; a deliberate departure becomes a Decisions row with options, who decides and by when (PLAN-7). List an addition the ask did not raise when it changes an interface, a dependency or what ships; other additions need no list. |
 
 ## Sizing
 
@@ -100,8 +101,11 @@ Every factual clause carries its tag and a number carries its source (EVID-1); t
 need evidence (VOICE-8); the plan states the current state only (VOICE-2); an open point stays
 open with who decides and by when (VOICE-9); the plan commits teams and roles, never the decider's
 own work (VOICE-13); the Decisions table is settled through grill-plan (GRILL-3). Before handing
-over, run the self-review in review-change (REVIEW-7) and one check of its own: the decider could
-explain the plan in three sentences without the document.
+over, run the self-review in review-change (REVIEW-7), compare the plan with the ask (PLAN-10),
+then give the plan to a fresh reader (REVIEW-11), and one check of its own: the decider could
+explain the plan in three sentences without the document. The summary at the gate carries the
+contradictions with the ask, the reader's paraphrase, findings and answers, and the decisions the
+reader found unrecorded, each now an open row in the Decisions table.
 
 ## Repository AGENTS.md, when there is code
 
