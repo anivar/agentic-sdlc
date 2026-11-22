@@ -1,7 +1,8 @@
-"""Pattern checks over text: tool attribution, key-shaped literals, and the mechanical part
-of the plain-voice rules.
+"""Pattern checks over text: tool attribution, key-shaped literals, the mechanical part of
+the plain-voice rules, and the structure of skill files (code fences, contents lists,
+metadata values).
 
-Every function returns ``Finding`` objects and never raises on odd input. Secret findings
+No function raises on odd input. The rule checks return ``Finding`` objects; secret findings
 carry the pattern name and the line number, never the matched value.
 """
 
@@ -190,6 +191,119 @@ def secret_findings(text: str, extra_patterns: Iterable[str] = ()) -> list[Findi
             findings.append(Finding("SECRET-1", name, number, "value withheld"))
             break
     return findings
+
+
+FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+
+
+def nested_fence_findings(body: str) -> list[tuple[int, int]]:
+    """Fences with an info string that open inside a block of the same fence character and
+    no greater length, as ``(line, opened_at)`` pairs with 1-based line numbers.
+
+    CommonMark reads such a fence as content, so the next bare fence closes the outer block
+    and the rest of the example renders as prose. The fix is a longer outer fence. After a
+    finding the scan follows the author's intent (the inner block closes first, then the
+    outer one), so one defect gives one finding. A bare inner fence looks like a closing
+    fence and is not found."""
+    findings: list[tuple[int, int]] = []
+    stack: list[tuple[str, int]] = []
+    for number, line in enumerate(body.splitlines(), 1):
+        match = FENCE_LINE_RE.match(line)
+        if not match:
+            continue
+        fence, info = match.group(1), match.group(2).strip()
+        if fence[0] == "`" and "`" in info:
+            continue  # not a fence line: a backtick fence's info string has no backticks
+        if not stack:
+            stack.append((fence, number))
+            continue
+        top, opened_at = stack[-1]
+        if fence[0] != top[0] or len(fence) < len(top):
+            continue  # content of the open block
+        if info:
+            findings.append((number, opened_at))
+            stack.append((fence, number))
+        else:
+            stack.pop()
+    return findings
+
+
+# A plain YAML scalar that parses as a number, boolean, null or date, not a string.
+YAML_NON_STRING_RE = re.compile(
+    r"^(?:[-+]?(?:0|[1-9][0-9]*|0o[0-7]+|0x[0-9a-fA-F]+)"
+    r"|[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
+    r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)"
+    r"|true|True|TRUE|false|False|FALSE|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF"
+    r"|null|Null|NULL|~"
+    r"|[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[Tt ].*)?)$"
+)
+
+
+def metadata_problems(frontmatter: str) -> list[str]:
+    """``metadata`` maps strings to strings. Reads the frontmatter text (between the ``---``
+    lines) and the indented lines under a block-style
+    ``metadata:`` key and names each value a YAML parser would not read as a string: a plain
+    number, boolean, null or date, or a nested list or map. Quoted values and block scalars
+    are strings."""
+    lines = frontmatter.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if re.match(r"^metadata:\s*(#.*)?$", line)), None
+    )
+    if start is None:
+        return []
+    block: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.strip() and line[0] not in " \t":
+            break
+        block.append(line)
+    content = [line for line in block if line.strip() and not line.strip().startswith("#")]
+    if not content:
+        return []
+    indent = len(content[0]) - len(content[0].lstrip())
+    entries: list[tuple[str, str, bool]] = []  # key, value, has deeper lines
+    for line in content:
+        depth = len(line) - len(line.lstrip())
+        if depth > indent:
+            if entries:
+                key, value, _ = entries[-1]
+                entries[-1] = (key, value, True)
+            continue
+        key, sep, value = line.strip().partition(":")
+        if sep:
+            entries.append((key.strip().strip("\"'"), value.strip(), False))
+    problems = []
+    for key, value, deeper in entries:
+        if value[:1] not in ('"', "'"):
+            value = re.sub(r"\s+#.*$", "", value)
+        if value in ("|", ">", "|-", ">-", "|+", ">+"):
+            continue
+        if value[:1] in ("[", "{") or (value == "" and deeper):
+            problems.append(
+                f"metadata.{key} holds a nested value; metadata maps strings to strings"
+            )
+        elif value == "" or (value[:1] not in ('"', "'") and YAML_NON_STRING_RE.match(value)):
+            problems.append(f"metadata.{key} is not a string; quote it")
+    return problems
+
+
+CONTENTS_RE = re.compile(r"^#{1,3} (?:Table of )?[Cc]ontents\s*$")
+
+
+def has_contents_list(body: str) -> bool:
+    """A Contents heading outside code blocks, with fences closed as CommonMark closes them."""
+    fence: str | None = None
+    for line in body.splitlines():
+        match = FENCE_LINE_RE.match(line)
+        if match:
+            mark, info = match.group(1), match.group(2).strip()
+            if fence is None:
+                fence = mark
+            elif mark[0] == fence[0] and len(mark) >= len(fence) and not info:
+                fence = None
+            continue
+        if fence is None and CONTENTS_RE.match(line):
+            return True
+    return False
 
 
 def added_lines(diff: str) -> str:

@@ -28,9 +28,15 @@ file is about changing the product.
 5. `docs/coverage.md` is generated. Run `agentic-sdlc coverage` after a registry change; CI
    fails when it is stale.
 6. Every `skills/*/SKILL.md` cites existing rule ids, lists in `metadata.rules` exactly the ids its
-   body cites, has `name` equal to its folder, a description under 1024 characters, and a license
-   line; a skill rewritten from another carries a `NOTICE` with the source's copyright line.
-   `check-skills` enforces the first four.
+   body cites, and has a license line. Its frontmatter follows the Agent Skills specification:
+   `name` equals its folder and uses lowercase letters, digits and single hyphens, with no hyphen
+   at either end; the description is 1 to 1024 characters; `compatibility`, when present, is 1 to
+   500; `metadata` maps strings to strings; and no key falls outside the specification except the
+   plugin keys `argument-hint` and `disable-model-invocation`. SKILL.md stays under 500 lines, a
+   reference over 100 lines carries a contents list, and an example that holds a fenced block
+   opens with a longer fence than the block it holds. A skill rewritten from another carries a
+   `NOTICE` with the source's copyright line. `check-skills` enforces all of this rule except the
+   `NOTICE`.
 7. The repository tree carries no attribution patterns and no key-shaped literals;
    `check-skills` scans for both. It also refuses any token the maintainer lists in
    `AGENTIC_SDLC_FORBIDDEN` (CI) or `.agentic-sdlc-forbidden.txt` (local, gitignored).
