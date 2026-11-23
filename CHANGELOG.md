@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.0.0 (unreleased)
+
+This release breaks existing behaviour: the guard's default is agent mode
+([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
+
+### Changed
+
+- Agent mode is the default. A call that a rule would ask about runs, and the decision record
+  keeps that rule with AGENT-1: commits, pushes and posts (ASK-1, ASK-2, ASK-3), a moved tag
+  (PUSH-2), a read of a secret-named file (SECRET-3), an edit of the guard's configuration
+  (GUARD-2), an untraced gated command (TRACE-1). The refusals stay: bulk staging (STAGE-1), hook
+  bypass (GUARD-1), a force push or delete of a protected branch (PUSH-1), attribution (ATTR-1,
+  ATTR-2), a staged secret (SECRET-1). A plain push to a protected branch runs and is recorded.
+- `"mode": "confirm"` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_MODE=confirm`, keeps the 1.x
+  behaviour. The variable overrides the file, and a value it does not know means confirm.
+- The decision record keeps every AGENT-1 and RUN-4 decision whatever `record.decisions` says;
+  other decisions follow the setting.
+
+### Added
+
+- The `unattended-runs` skill with RUN-1 to RUN-3
+  ([ADR 0007](docs/adr/0007-an-unattended-run-never-waits-on-a-person.md)). In confirm mode, with
+  `AGENTIC_SDLC_UNATTENDED` set by the launcher, no call asks: a commit on a branch that is not
+  protected passes, a push passes only to a branch in `unattended.push_branches`, and every other
+  ask is refused with a reason the agent acts on.
+- RUN-4: a command that sets `AGENTIC_SDLC_UNATTENDED` is recorded, and neither asked about nor
+  refused.
+- Registry: `record` as a hook decision, and the `examples_unattended` and `examples_agent`
+  example sets, each decided as written on every `just check`.
+
+### Verified
+
+- Print-mode runs with Claude Code, 2026-11-22: the confirm-mode unattended rows of
+  `docs/verification.md`, seven of seven as written.
+- Print-mode runs with Claude Code 2.1.330, 2026-11-23, no mode set: a push to `main` ran and
+  `agentic-sdlc log` named ASK-2 and AGENT-1; a command starting an unattended child ran and the
+  log named RUN-4.
+
 ## 1.1.0 (2026-10-14)
 
 ### Added

@@ -13,6 +13,15 @@ def git(cwd: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+@pytest.fixture(autouse=True)
+def attended_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shell that exported AGENTIC_SDLC_UNATTENDED must not change what the suite expects.
+    The suite runs in confirm mode, where each rule's own decision shows; test_modes.py covers
+    agent mode, the default, which turns each ask into a recorded allow (AGENT-1)."""
+    monkeypatch.delenv("AGENTIC_SDLC_UNATTENDED", raising=False)
+    monkeypatch.setenv("AGENTIC_SDLC_MODE", "confirm")
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A throwaway repository with one commit on main and a clean index."""

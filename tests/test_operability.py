@@ -44,12 +44,71 @@ def test_registry_examples_decide_as_written(
         assert rule_id in decision.rules, (rule_id, command, decision.rules)
 
 
+UNATTENDED_CFG = config_mod.from_dict(
+    {"secrets": {"scanner": "none"}, "unattended": {"push_branches": ["agent/*"]}}
+)
+
+
+def unattended_example_cases():
+    for rule in registry.rules():
+        for expected, commands in (rule.get("examples_unattended") or {}).items():
+            for command in commands:
+                yield pytest.param(
+                    rule["id"],
+                    rule.get("decision"),
+                    expected,
+                    command,
+                    id=f"{rule['id']}:unattended:{expected}:{command[:40]}",
+                )
+
+
+@pytest.mark.parametrize("rule_id,own,expected,command", list(unattended_example_cases()))
+def test_registry_unattended_examples_decide_as_written(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, rule_id: str, own: str, expected: str, command: str
+):
+    """The unattended examples decide as their key says, on a working branch with the launcher's
+    signal set and agent/* listed for pushes (the registry schema states these conditions)."""
+    git(repo, "checkout", "-q", "-b", "agent/work")
+    monkeypatch.setenv("AGENTIC_SDLC_UNATTENDED", "1")
+    decision = guard.decide(command, repo, UNATTENDED_CFG)
+    assert decision.permission == expected, (rule_id, command, decision.reason)
+    if expected == own:
+        assert rule_id in decision.rules, (rule_id, command, decision.rules)
+
+
+def agent_example_cases():
+    for rule in registry.rules():
+        for expected, commands in (rule.get("examples_agent") or {}).items():
+            for command in commands:
+                yield pytest.param(
+                    rule["id"],
+                    rule.get("decision"),
+                    expected,
+                    command,
+                    id=f"{rule['id']}:agent:{expected}:{command[:40]}",
+                )
+
+
+@pytest.mark.parametrize("rule_id,own,expected,command", list(agent_example_cases()))
+def test_registry_agent_examples_decide_as_written(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, rule_id: str, own: str, expected: str, command: str
+):
+    """The agent-mode examples decide as their key says with no mode set; a record rule is among
+    the reasons of every call it lets through."""
+    monkeypatch.delenv("AGENTIC_SDLC_MODE", raising=False)
+    decision = guard.decide(command, repo, NO_SCANNER)
+    assert decision.permission == expected, (rule_id, command, decision.reason)
+    if own == "record" and expected == "allow":
+        assert rule_id in decision.rules, (rule_id, command, decision.reason)
+
+
 def test_every_hook_rule_has_a_fix_line_and_examples():
     for rule in registry.rules():
         if "hook" in rule["mechanisms"]:
             assert rule.get("fix"), rule["id"]
             if rule["id"] not in ("ATTR-2", "SECRET-1", "GUARD-2"):
-                assert rule.get("examples"), rule["id"]
+                keys = ("examples", "examples_unattended", "examples_agent")
+                assert any(rule.get(key) for key in keys), rule["id"]
 
 
 def test_refusals_carry_the_fix_line(repo: Path):

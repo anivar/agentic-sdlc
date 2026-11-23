@@ -3,8 +3,10 @@
 This repository runs with the agentic-sdlc skills and hook (https://github.com/anivar/agentic-sdlc).
 The rule ids below are stable and defined in that repository's `rules/registry.json`.
 
-- Every commit, push and post waits for its own go-ahead (ASK-1, ASK-2, ASK-3). Drafts are
-  shown in the conversation and never posted.
+- Each commit, push and post is decided on its own (ASK-1, ASK-2, ASK-3). In agent mode, the
+  default, the agent decides and the decision record keeps the rule (AGENT-1). With
+  `"mode": "confirm"` in `.agentic-sdlc.json`, each waits for a person's go-ahead and a draft is
+  shown in the conversation first.
 - Stage by path; never `git add -A` (STAGE-1). No force push to a protected branch (PUSH-1).
 - No tool attribution in commits, pull requests or issues (ATTR-1). The signer is the operator
   of record for the change.

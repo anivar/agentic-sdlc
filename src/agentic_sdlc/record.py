@@ -1,4 +1,6 @@
-"""The decision record: one JSON line per hook decision, when a repository turns it on.
+"""The decision record: one JSON line per hook decision, when a repository turns it on. A
+decision the agent makes in place of a person (AGENT-1) or a start of an unattended run (RUN-4)
+is kept whatever the repository says.
 
 The record is the witness for a rollout: with ``record.shadow`` a team sees what the hook
 would have decided before it refuses anything. It never stores the command text, only its
@@ -16,6 +18,7 @@ from typing import Any
 from . import config as config_mod
 
 RECORD_NAME = "decisions.jsonl"
+ALWAYS_RECORDED = frozenset({"AGENT-1", "RUN-4"})
 PRE_HEAD_NAME = "pre-head.json"
 
 
@@ -62,6 +65,12 @@ def drop_pre_head(cwd: Path) -> None:
         (folder / PRE_HEAD_NAME).unlink(missing_ok=True)
     except OSError:
         return
+
+
+def must_record(rules: list[str]) -> bool:
+    """The agent decided in place of a person, or started an unattended run: kept even with
+    the record off, so no agent decision goes unseen."""
+    return not ALWAYS_RECORDED.isdisjoint(rules)
 
 
 def record_path(cfg: config_mod.Config, cwd: Path | None) -> Path | None:

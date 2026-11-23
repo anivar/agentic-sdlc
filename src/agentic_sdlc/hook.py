@@ -9,7 +9,9 @@ Three behaviours beyond the decision itself:
 
 - In a permission mode that cannot prompt (``bypassPermissions``, ``dontAsk``) an ask or a
   deny is returned as a blocking error (exit 2), since the documentation states that such
-  modes do not show a prompt; the reason tells the user to run the command themselves.
+  modes do not show a prompt; the reason tells the agent not to retry and to report the call.
+- When the launcher set ``AGENTIC_SDLC_UNATTENDED``, the guard never asks (RUN-1); that
+  mapping happens in ``guard`` before the decision reaches this module.
 - With ``record.shadow`` (or ``AGENTIC_SDLC_SHADOW=1``) the decision is recorded and every
   command is let through, so a team can see what the hook would do before it refuses anything.
 - After a commit ran (PostToolUse, which fires on success only), the message now at HEAD is
@@ -122,9 +124,17 @@ def before_bash(call: Call) -> int:
     except Exception as exc:  # noqa: BLE001 - the hook must never crash the session
         report_error(exc)
         if guard.looks_gated(call.command):
-            output(
-                "ask", f"agentic-sdlc could not analyse this command ({exc!r}); confirm it yourself"
-            )
+            if config_mod.unattended_from_env():
+                output(
+                    "deny",
+                    f"agentic-sdlc could not analyse this command ({exc!r}); RUN-1: "
+                    + guard.UNATTENDED_HELD,
+                )
+            else:
+                output(
+                    "ask",
+                    f"agentic-sdlc could not analyse this command ({exc!r}); confirm it yourself",
+                )
         return 0
     parsed = command_mod.parse(call.command, call.cwd)
     committed = [f for f in parsed.commands if f.is_commit and not f.dry_run]
@@ -147,7 +157,7 @@ def before_file(call: Call) -> int:
     except Exception as exc:  # noqa: BLE001
         report_error(exc)
         return 0
-    if decision.permission == "allow":
+    if decision.permission == "allow" and not record.must_record(decision.rules):
         return 0  # file reads are not recorded; only a decision is
     return settle(call, cfg, decision, subject=call.path, kinds=["file"], ms=0.0)
 
@@ -161,10 +171,11 @@ def settle(
     kinds: list[str],
     ms: float,
 ) -> int:
-    """Record the decision when the repository keeps a record, then return it the way the
+    """Record the decision when the repository keeps a record or the agent decided in place of
+    a person (record.must_record), then return it the way the
     permission mode can take it: nothing for allow or shadow, a blocking error where no prompt
     is possible, the JSON decision otherwise."""
-    if cfg.recording:
+    if cfg.recording or record.must_record(decision.rules):
         record.append(
             cfg,
             call.cwd,
@@ -185,8 +196,9 @@ def settle(
         return 0
     if call.mode in NO_PROMPT_MODES:
         return block(
-            f"agentic-sdlc {decision.reason}; this permission mode cannot prompt, so the call is refused; "
-            "do it yourself or change the mode"
+            f"agentic-sdlc {decision.reason}; this permission mode cannot prompt, so the call is "
+            "refused. Do not retry it: carry on with the next step and list it in the run report "
+            "so a person can run it"
         )
     output(decision.permission, "agentic-sdlc " + decision.reason)
     return 0

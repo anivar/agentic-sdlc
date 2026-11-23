@@ -19,6 +19,9 @@ from . import registry
 CONFIG_NAME = ".agentic-sdlc.json"
 SCANNERS = ("trufflehog", "none")
 CONFIRM_SCOPES = ("each", "slice", "off")
+# Set by whoever launches a run that nobody watches. Read from the hook's own environment, which
+# is Claude Code's, so neither committed config nor a command the agent runs can set it.
+UNATTENDED_ENV = "AGENTIC_SDLC_UNATTENDED"
 
 # Names that identify a tool when they appear inside a trailer, a footer or a sign-off.
 # Wide on purpose: in that position a match is unambiguous.
@@ -87,8 +90,19 @@ VENDOR_EMAIL_DOMAINS = [
 ]
 
 
+# Who answers an ask (AGENT-1): the agent decides by default; "confirm" puts a person in front of
+# every ask. The environment overrides the file, and a value it does not know means confirm.
+MODE_ENV = "AGENTIC_SDLC_MODE"
+MODES = ("agent", "confirm")
+
+
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def unattended_from_env() -> bool:
+    """True when the launcher marked this run as one that nobody watches (RUN-1)."""
+    return _env_flag(UNATTENDED_ENV)
 
 
 @dataclass
@@ -96,6 +110,7 @@ class Config:
     protected_branches: list[str] = field(default_factory=lambda: ["main", "master"])
     attribution_mode: str = "patterns"
     vendors: list[str] = field(default_factory=list)
+    mode: str = "agent"
     confirm_commit: bool = True
     confirm_push: bool = True
     confirm_post: bool = True
@@ -111,6 +126,7 @@ class Config:
     record_shadow: bool = False
     record_path: str = ""
     trace_untracked: str = "allow"
+    unattended_push: list[str] = field(default_factory=list)
     source: Path | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -130,6 +146,25 @@ class Config:
     def shadow(self) -> bool:
         """Record what the hook would decide and let everything through."""
         return self.record_shadow or _env_flag("AGENTIC_SDLC_SHADOW")
+
+    @property
+    def effective_mode(self) -> str:
+        """agent or confirm, after the environment's override (AGENT-1)."""
+        env = os.environ.get(MODE_ENV, "").strip().lower()
+        if env:
+            return env if env in MODES else "confirm"
+        return self.mode
+
+    @property
+    def agent_decides(self) -> bool:
+        """The agent answers its own asks; the guard records them (AGENT-1)."""
+        return self.effective_mode == "agent"
+
+    @property
+    def unattended(self) -> bool:
+        """In confirm mode, nobody can answer a prompt in this run, so an ask is refused (RUN-1).
+        In agent mode there is no ask to refuse, and the signal changes nothing."""
+        return not self.agent_decides and unattended_from_env()
 
     @property
     def recording(self) -> bool:
@@ -155,11 +190,13 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         "protected_branches",
         "attribution",
         "confirm",
+        "mode",
         "stage",
         "secrets",
         "posting",
         "record",
         "trace",
+        "unattended",
     }
     for key in data:
         if key not in known_top:
@@ -190,6 +227,12 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
                 problems.append("attribution.vendors must be an array of strings")
     else:
         problems.append("attribution must be an object")
+
+    mode = data.get("mode", "agent")
+    if mode in MODES:
+        cfg.mode = mode
+    else:
+        problems.append("mode must be agent or confirm")
 
     confirm = data.get("confirm") or {}
     if isinstance(confirm, dict):
@@ -264,6 +307,19 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
             problems.append("record.path must be a string")
     else:
         problems.append("record must be an object")
+
+    unattended = data.get("unattended") or {}
+    if isinstance(unattended, dict):
+        for key in unattended:
+            if key != "push_branches":
+                problems.append(f"unknown key unattended.{key}")
+        pushes = unattended.get("push_branches", [])
+        if _is_str_list(pushes):
+            cfg.unattended_push = [p.strip() for p in pushes if p.strip()]
+        else:
+            problems.append("unattended.push_branches must be an array of strings")
+    else:
+        problems.append("unattended must be an object")
 
     posting = data.get("posting") or {}
     if isinstance(posting, dict):
