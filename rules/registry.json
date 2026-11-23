@@ -1262,7 +1262,7 @@
     {
       "id": "RUN-4",
       "title": "An agent may start an unattended run, and the start is recorded",
-      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, is neither asked about nor refused, and the guard MUST record the start under RUN-4 where the repository keeps a decision record. In the run it starts, RUN-1 holds.",
+      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, is neither asked about nor refused, and the guard MUST record the start under RUN-4 in the decision record, whatever record.decisions says. In the run it starts, RUN-1 holds.",
       "mechanisms": [
         "hook",
         "skill"
@@ -1390,7 +1390,7 @@
     {
       "id": "AGENT-1",
       "title": "The agent decides; the guard records what it would have asked",
-      "statement": "In agent mode, the default, a call that a rule would ask about MUST be allowed and recorded with that rule and AGENT-1 where the repository keeps a decision record: the agent decides, under its own instructions. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
+      "statement": "In agent mode, the default, a call that a rule would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
       "mechanisms": [
         "hook"
       ],

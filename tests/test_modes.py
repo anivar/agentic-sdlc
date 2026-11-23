@@ -99,6 +99,20 @@ def test_an_unknown_mode_in_the_file_is_a_problem():
     assert "mode must be agent or confirm" in cfg(mode="yolo").problems
 
 
+@pytest.mark.parametrize("value", ["yolo", "Agent", "", 1, None])
+def test_an_unknown_mode_in_the_file_means_confirm(repo: Path, agent_mode: None, value: object):
+    decision = guard.decide('git commit -m "x"', repo, cfg(mode=value))
+    assert decision.permission == "ask" and "AGENT-1" not in decision.rules, decision.reason
+
+
+@pytest.mark.parametrize("body", ['{"mode": "confirm",', "[]"])
+def test_a_config_file_the_guard_cannot_read_means_confirm(repo: Path, agent_mode: None, body: str):
+    (repo / ".agentic-sdlc.json").write_text(body, encoding="utf-8")
+    loaded = config_mod.load(repo)
+    assert loaded.problems and loaded.effective_mode == "confirm"
+    assert guard.decide('git commit -m "x"', repo, loaded).permission == "ask"
+
+
 def test_the_unattended_signal_changes_nothing_in_agent_mode(
     repo: Path, agent_mode: None, monkeypatch: pytest.MonkeyPatch
 ):

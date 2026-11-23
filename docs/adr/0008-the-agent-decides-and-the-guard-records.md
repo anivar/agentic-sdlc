@@ -25,6 +25,8 @@ on staging and attribution.
 
 - `mode` in `.agentic-sdlc.json`, `agent` (the default) or `confirm`. `AGENTIC_SDLC_MODE`
   overrides the file; a value it does not know means `confirm`, so a typo fails toward a person.
+  An unknown value in the file, or a configuration file the guard cannot read, also means
+  `confirm`: that file may be the one that set confirm mode.
 - In agent mode, `apply_mode` in the guard turns every `ask` into `allow` and adds AGENT-1. The
   hook says nothing for an allow, so Claude Code's own permission system still decides the call;
   the guard adds no prompt and no refusal of its own.
@@ -55,7 +57,7 @@ on staging and attribution.
 | Failure | Allowed impact | Mechanism | Test |
 |---|---|---|---|
 | A repository that needs a person in the loop runs in agent mode | calls run unreviewed until the repository sets confirm | `"mode": "confirm"` or `AGENTIC_SDLC_MODE=confirm` | `tests/test_modes.py::test_confirm_mode_from_the_file_asks` |
-| A typo in the environment value | none: the guard asks | unknown value means confirm | `test_an_unknown_mode_in_the_environment_means_confirm` |
+| A typo in the environment or the file, or a configuration file the guard cannot read | none: the guard asks | an unknown value or an unreadable file means confirm | `test_an_unknown_mode_in_the_environment_means_confirm`, `test_an_unknown_mode_in_the_file_means_confirm`, `test_a_config_file_the_guard_cannot_read_means_confirm` |
 | Agent mode lifts a refusal | none allowed | `apply_mode` returns on anything but `ask` | `test_a_refusal_still_refuses`, mutant "agent mode also lifts refusals" killed |
 | Nobody can see what the agent decided | none: every AGENT-1 and RUN-4 decision is kept with the record off | `record.must_record` in the hook, on the Bash and the file-tool paths | `test_an_agent_decision_is_recorded_with_no_record_setting`, `test_a_file_edit_the_agent_decides_is_recorded` |
 
@@ -74,5 +76,5 @@ An edit of the configuration can set confirm mode off or change the protected br
 
 Parked: a per-rule mode, and an agent-visible note on a recorded ask (a PostToolUse context line).
 
-Confirmation: `tests/test_modes.py` (18 cases) and `tests/test_operability.py::test_registry_agent_examples_decide_as_written`
-run on every `just check`; six mutants of the mode code and four of the record rule were killed on 2026-11-23.
+Confirmation: `tests/test_modes.py` (25 cases) and `tests/test_operability.py::test_registry_agent_examples_decide_as_written`
+run on every `just check`; six mutants of the mode code, four of the record rule and two of the confirm fallback were killed on 2026-11-23.

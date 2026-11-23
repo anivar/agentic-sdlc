@@ -14,7 +14,8 @@ This release breaks existing behaviour: the guard's default is agent mode
   bypass (GUARD-1), a force push or delete of a protected branch (PUSH-1), attribution (ATTR-1,
   ATTR-2), a staged secret (SECRET-1). A plain push to a protected branch runs and is recorded.
 - `"mode": "confirm"` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_MODE=confirm`, keeps the 1.x
-  behaviour. The variable overrides the file, and a value it does not know means confirm.
+  behaviour. The variable overrides the file. An unknown value in either, or a configuration file
+  the guard cannot read, means confirm.
 - The decision record keeps every AGENT-1 and RUN-4 decision whatever `record.decisions` says;
   other decisions follow the setting.
 
@@ -27,6 +28,9 @@ This release breaks existing behaviour: the guard's default is agent mode
   ask is refused with a reason the agent acts on.
 - RUN-4: a command that sets `AGENTIC_SDLC_UNATTENDED` is recorded, and neither asked about nor
   refused.
+- The `session-handoff` skill with HANDOFF-1 to HANDOFF-5: work stays coherent across sessions,
+  compactions and full context windows through a progress file and a JSON feature list. Each
+  session takes one feature and ends with a checkpoint commit.
 - Registry: `record` as a hook decision, and the `examples_unattended` and `examples_agent`
   example sets, each decided as written on every `just check`.
 
