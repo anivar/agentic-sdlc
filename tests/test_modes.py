@@ -36,7 +36,6 @@ def cfg(**extra: object) -> config_mod.Config:
         ('git commit -m "Add the parser"', "ASK-1"),
         ("git push origin main", "ASK-2"),
         ('gh pr create --title "Add it" --body "Adds it."', "ASK-3"),
-        ("cat .env", "SECRET-3"),
     ],
 )
 def test_an_ask_runs_and_records_the_rule_that_would_have_asked(
@@ -61,9 +60,36 @@ def test_a_refusal_still_refuses(repo: Path, agent_mode: None, command: str, rul
     assert "AGENT-1" not in decision.rules
 
 
-def test_an_edit_to_the_guard_config_runs_and_is_recorded(repo: Path, agent_mode: None):
-    decision = guard.decide_file("Edit", str(repo / ".agentic-sdlc.json"), repo, cfg())
-    assert decision.permission == "allow" and {"GUARD-2", "AGENT-1"} <= set(decision.rules)
+def kept_asks(repo: Path) -> list[guard.Decision]:
+    """A read of a secret-named file, and edits that could switch the refusals off: protected
+    branches emptied, the secret scan or the hook removed."""
+    return [
+        guard.decide("cat .env", repo, cfg()),
+        guard.decide_file("Read", str(repo / ".env"), repo, cfg()),
+        guard.decide_file("Edit", str(repo / ".agentic-sdlc.json"), repo, cfg()),
+        guard.decide_file("Write", str(repo / ".claude" / "settings.json"), repo, cfg()),
+    ]
+
+
+def test_a_secret_read_or_a_guard_config_edit_still_asks_in_agent_mode(
+    repo: Path, agent_mode: None
+):
+    for decision in kept_asks(repo):
+        assert decision.permission == "ask", decision.reason
+        assert {"SECRET-3", "GUARD-2"} & set(decision.rules) and "AGENT-1" not in decision.rules
+
+
+def test_a_kept_ask_is_refused_in_an_unattended_agent_mode_run(
+    repo: Path, agent_mode: None, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("AGENTIC_SDLC_UNATTENDED", "1")
+    for decision in kept_asks(repo):
+        assert decision.permission == "deny" and "RUN-1" in decision.rules, decision.reason
+
+
+def test_a_kept_ask_beside_an_agent_decision_keeps_the_prompt(repo: Path, agent_mode: None):
+    decision = guard.decide('cat .env && git commit -m "x"', repo, cfg())
+    assert decision.permission == "ask" and "AGENT-1" not in decision.rules, decision.reason
 
 
 def test_confirm_mode_from_the_file_asks(repo: Path, agent_mode: None):
@@ -180,11 +206,12 @@ def test_an_agent_decision_is_recorded_with_no_record_setting(repo: Path, comman
     git(repo, "status")
 
 
-def test_a_file_edit_the_agent_decides_is_recorded(repo: Path):
+def test_a_guard_config_edit_asks_through_the_hook_in_agent_mode(repo: Path):
     (repo / ".agentic-sdlc.json").write_text(json.dumps(NO_SCANNER))
     result = run_hook(repo, "Edit", {"file_path": str(repo / ".agentic-sdlc.json")})
-    assert result.returncode == 0 and result.stdout.strip() == "", result.stdout + result.stderr
-    assert "GUARD-2, AGENT-1" in decision_log(repo)
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "ask" and "GUARD-2" in out["permissionDecisionReason"]
 
 
 def test_a_plain_allow_is_not_recorded_by_default(repo: Path):

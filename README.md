@@ -22,8 +22,9 @@ enforce the rules an agent must not be able to talk its way past:
   hook-bypass flags, force pushes to protected branches and staged secrets, and asks before every
   commit, push and post; the same hook asks before a credential file is read or the guard's own
   configuration is edited through the file tools, and checks the commit that just landed. In
-  agent mode, the default, the agent answers each of those asks itself and the decision record
-  keeps the rule (AGENT-1); `"mode": "confirm"` puts a person in front of every ask;
+  agent mode, the default, the agent answers the commit, push and post asks itself and the
+  decision record keeps the rule (AGENT-1), while a credential read and an edit of the guard's
+  configuration still ask; `"mode": "confirm"` puts a person in front of every ask;
 - **native git hooks** (`commit-msg`, `pre-commit`, `pre-push`) that hold the same attribution,
   secret and protected-branch rules for every other agent and every person, installed with one
   command or through the pre-commit framework;
@@ -115,12 +116,12 @@ not run Windows, so Windows behaviour is not verified on every change.
 ### Mechanisms
 
 Each row states what the rule decides in confirm mode. In agent mode, the default, a call marked
-**asks** runs and the decision record keeps the rule with AGENT-1; a call marked **denied** is
-still denied ([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
+**asks** runs and the decision record keeps the rule with AGENT-1, except SECRET-3 and GUARD-2,
+which still ask; a call marked **denied** is still denied ([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
 
 | Rule | What happens | Where |
 |---|---|---|
-| AGENT-1 | in agent mode, the default, any call another rule **asks** about: **runs**, and the decision record keeps that rule beside AGENT-1; `"mode": "confirm"` in `.agentic-sdlc.json` or `AGENTIC_SDLC_MODE=confirm` turns it off, and an unknown value of the variable means confirm | hook |
+| AGENT-1 | in agent mode, the default, any call another rule **asks** about, except a credential read (SECRET-3) and an edit of the guard's configuration (GUARD-2): **runs**, and the decision record keeps that rule beside AGENT-1; `"mode": "confirm"` in `.agentic-sdlc.json` or `AGENTIC_SDLC_MODE=confirm` turns it off, and an unknown value or a configuration file the guard cannot read means confirm | hook |
 | ATTR-1 | any trailer naming a tool, a "Generated with" footer, or the robot emoji beside one, in a commit, pull request, issue or release text: **denied** | hook, before the command and again on the message at HEAD after a commit ran; git `commit-msg` hook; CI for pull request title, body and commits |
 | ATTR-2 | any vendor mention in change text when the repository opts into strict mode: **denied** | hook, git `commit-msg` hook, CI |
 | STAGE-1 | `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, `git commit -a`: **denied**; `git add -A src/` passes | hook |
@@ -172,9 +173,8 @@ deny: GUARD-1, ASK-1
   ASK-1: A commit waits for a go-ahead: commit needs your go-ahead. Fix: Show the staged change and the message; commit when the user says yes.
 
 $ agentic-sdlc guard 'cat .env'
-allow: SECRET-3, AGENT-1
+ask: SECRET-3
   SECRET-3: Reading a secret file asks: .env holds credentials by name. Fix: Name the variable or the file and its length or hash instead; read the file only when the user says yes.
-  AGENT-1: The agent decides; the guard records what it would have asked: recorded, not asked
 
 $ agentic-sdlc guard 'gh pr merge 12 --squash'
 allow: ASK-3, AGENT-1
@@ -182,8 +182,8 @@ allow: ASK-3, AGENT-1
   AGENT-1: The agent decides; the guard records what it would have asked: recorded, not asked
 ```
 
-In confirm mode the deny lines are the same, and the last two calls print `ask: SECRET-3` and
-`ask: ASK-3` and wait for a person.
+In confirm mode the deny lines and the SECRET-3 ask are the same, and the last call prints
+`ask: ASK-3` and waits for a person.
 
 ### What the mechanisms do not cover
 

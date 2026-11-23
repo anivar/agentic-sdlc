@@ -119,12 +119,12 @@ def validate(data: dict[str, Any]) -> list[str]:
             problems.append(f"{where}: opt_in must be boolean")
         if "fix" in rule and (not isinstance(rule["fix"], str) or len(rule["fix"]) < 10):
             problems.append(f"{where}: fix must be a sentence")
-        # Neither an unattended run (RUN-1) nor agent mode (AGENT-1) asks, so their examples are
-        # only allow or deny.
+        # An unattended run (RUN-1) never asks, so its examples are only allow or deny. Agent mode
+        # (AGENT-1) asks only for the kept asks (GUARD-2, SECRET-3).
         for key, allowed in (
             ("examples", {"deny", "ask", "allow"}),
             ("examples_unattended", {"deny", "allow"}),
-            ("examples_agent", {"deny", "allow"}),
+            ("examples_agent", {"deny", "ask", "allow"}),
         ):
             examples = rule.get(key)
             if examples is None:

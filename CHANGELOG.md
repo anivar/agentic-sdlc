@@ -9,8 +9,9 @@ This release breaks existing behaviour: the guard's default is agent mode
 
 - Agent mode is the default. A call that a rule would ask about runs, and the decision record
   keeps that rule with AGENT-1: commits, pushes and posts (ASK-1, ASK-2, ASK-3), a moved tag
-  (PUSH-2), a read of a secret-named file (SECRET-3), an edit of the guard's configuration
-  (GUARD-2), an untraced gated command (TRACE-1). The refusals stay: bulk staging (STAGE-1), hook
+  (PUSH-2), an untraced gated command (TRACE-1). A read of a secret-named file (SECRET-3) and an
+  edit of the guard's configuration (GUARD-2) still ask, because such an edit can switch every
+  refusal off; with `AGENTIC_SDLC_UNATTENDED` set they are refused (RUN-1). The refusals stay: bulk staging (STAGE-1), hook
   bypass (GUARD-1), a force push or delete of a protected branch (PUSH-1), attribution (ATTR-1,
   ATTR-2), a staged secret (SECRET-1). A plain push to a protected branch runs and is recorded.
 - `"mode": "confirm"` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_MODE=confirm`, keeps the 1.x

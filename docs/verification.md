@@ -40,7 +40,8 @@ agent uses do not matter.
 | edit `.agentic-sdlc.json` to set `confirm.commit` to false | a prompt naming GUARD-2 |
 
 Run the table in confirm mode (`AGENTIC_SDLC_MODE=confirm` in the environment of `claude`), where
-each rule's own decision shows. In agent mode, the default, every "prompt" row runs instead, and
+each rule's own decision shows. In agent mode, the default, every "prompt" row except SECRET-3
+and GUARD-2 runs instead, and
 `agentic-sdlc log` names the rule with AGENT-1; the "refused" rows are still refused.
 
 Run the table once in each permission mode: default, `acceptEdits` (`/permissions` or

@@ -488,15 +488,25 @@ def agent_branch_push(facts: command_mod.Facts, cfg: config_mod.Config) -> bool:
     return True
 
 
+# Asks a person answers in agent mode too. An edit to the guard's own configuration can switch
+# every refusal off (empty the protected branches, drop the secret scan or the hook), and a read
+# of a secret-named file puts the secret into the transcript.
+KEPT_ASKS = frozenset({"GUARD-2", "SECRET-3"})
+
+
 def apply_mode(
     decision: Decision, cfg: config_mod.Config, titles: dict[str, str], fixes: dict[str, str]
 ) -> None:
     """Settle who answers an ask. In agent mode, the default, the agent decides: the call is
-    allowed and AGENT-1 is recorded beside the rule that asked. In confirm mode a person answers,
-    and in an unattended run nobody can, so the ask is refused (RUN-1). A refusal stays a refusal."""
+    allowed and AGENT-1 is recorded beside the rule that asked, except for KEPT_ASKS, which a
+    person answers. In confirm mode a person answers every ask. In an unattended run nobody can,
+    so an ask a person would answer is refused (RUN-1). A refusal stays a refusal."""
     if decision.permission != "ask":
         return
-    if cfg.agent_decides:
+    if cfg.agent_decides and not KEPT_ASKS.isdisjoint(decision.rules):
+        if config_mod.unattended_from_env():
+            hold_for_unattended(decision, titles, fixes)
+    elif cfg.agent_decides:
         decision.permission = "allow"
         title = titles.get("AGENT-1", "AGENT-1")
         decision.add("allow", "AGENT-1", f"{title}: recorded, not asked")

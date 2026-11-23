@@ -1426,7 +1426,7 @@
     {
       "id": "AGENT-1",
       "title": "The agent decides; the guard records what it would have asked",
-      "statement": "In agent mode, the default, a call that a rule would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
+      "statement": "In agent mode, the default, a call that a rule other than GUARD-2 or SECRET-3 would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A GUARD-2 or SECRET-3 ask MUST still go to a person, and MUST be refused under RUN-1 when the launcher set AGENTIC_SDLC_UNATTENDED, because an edit of the guard's configuration can switch the refusals off. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
       "mechanisms": [
         "hook"
       ],
@@ -1440,7 +1440,9 @@
         "allow": [
           "git commit -m \"Add the parser\"",
           "git push origin main",
-          "gh pr create --title \"Add it\" --body \"Adds it.\"",
+          "gh pr create --title \"Add it\" --body \"Adds it.\""
+        ],
+        "ask": [
           "cat .env"
         ],
         "deny": [

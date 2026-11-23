@@ -163,6 +163,12 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "ask": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }

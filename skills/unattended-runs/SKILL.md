@@ -2,7 +2,8 @@
 name: unattended-runs
 description: >
   Run agent work that nobody watches without stalling it at a prompt. In agent mode, the guard's
-  default, nothing asks. In a repository set to confirm mode, whoever launches the run sets
+  default, only a secret-file read and an edit of the guard's configuration ask, and with
+  AGENTIC_SDLC_UNATTENDED set they are refused. In a repository set to confirm mode, whoever launches the run sets
   AGENTIC_SDLC_UNATTENDED, so the guard never asks: checkpoint commits pass on a working
   branch, pushes pass only to listed agent branches, and every other gated call is refused with
   a reason the agent acts on. The run starts with a finish condition, a spend cap and a branch
@@ -31,7 +32,7 @@ needed a person is written down for one.
 
 | Id | Rule | In practice |
 |---|---|---|
-| RUN-1 | An unattended run never waits on a person | Hook, opt-in, confirm mode only: agent mode has no ask to hold. With `AGENTIC_SDLC_UNATTENDED` set by the launcher, a commit on a branch that is not protected passes; a push passes only to a branch that matches `unattended.push_branches` and is not protected, with no force, tags, deletion or mirror. Every other call that would ask (a commit elsewhere, any other push, a post, a secret file, a change to the guard's configuration) is refused with a reason that says not to retry. Deny rules still refuse (STAGE-1, PUSH-1, GUARD-1). |
+| RUN-1 | An unattended run never waits on a person | Hook, opt-in. In agent mode it holds only the two asks that remain there (SECRET-3, GUARD-2). In confirm mode, with `AGENTIC_SDLC_UNATTENDED` set by the launcher, a commit on a branch that is not protected passes; a push passes only to a branch that matches `unattended.push_branches` and is not protected, with no force, tags, deletion or mirror. Every other call that would ask (a commit elsewhere, any other push, a post, a secret file, a change to the guard's configuration) is refused with a reason that says not to retry. Deny rules still refuse (STAGE-1, PUSH-1, GUARD-1). |
 | RUN-2 | Start with a finish line, a cap and its own branch | A finish condition a check can show, a spend cap, a working branch or worktree, and in confirm mode the signal set by whoever launches. Use the platform's own loop, not a loop of your own. |
 | RUN-3 | End with a report in a file | Commits with shas, checks with commands and results, held calls, failures and skips, what is left. A held call is never retried or worked around during the run. |
 | RUN-4 | An agent may start an unattended run, and the start is recorded | Hook, record only. A command that sets `AGENTIC_SDLC_UNATTENDED` (a leading assignment, `env`, `export`) is the agent's own decision: never asked about or refused, written to the decision record. The run it starts follows RUN-1. |
@@ -119,7 +120,7 @@ Finish condition: <text> · Met: yes | no · Branch: <branch> · Started <UTC> �
 | Push to a branch in `push_branches` | runs, recorded (ASK-2, AGENT-1) | asks (ASK-2) | passes |
 | Any other push, tags | runs, recorded; a force push or delete of a protected branch is refused (PUSH-1) | asks, or refused to a protected branch (PUSH-1) | refused |
 | A post to the forge: pull request, comment, review | runs, recorded (ASK-3, AGENT-1) | asks (ASK-3) | refused |
-| A secret file, the guard's own configuration | runs, recorded (SECRET-3 or GUARD-2, AGENT-1) | asks (SECRET-3, GUARD-2) | refused |
+| A secret file, the guard's own configuration | asks (SECRET-3, GUARD-2); refused when the launcher set the signal | asks (SECRET-3, GUARD-2) | refused |
 | `git add -A`, `--no-verify` | refused (STAGE-1, GUARD-1) | refused | refused |
 
 ## Companion skills
