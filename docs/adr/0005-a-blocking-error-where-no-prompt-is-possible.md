@@ -1,6 +1,6 @@
 # A mode that cannot prompt gets a blocking error, not an ask
 
-Status: accepted · Date: 2026-10-10 · Decides: the maintainer
+Status: accepted · Date: 2026-10-10 · Decides: the maintainer · Extended by: [ADR 0007](0007-an-unattended-run-never-waits-on-a-person.md)
 
 The hook's answer to a commit, a push or a post is an `ask`: the user decides, every time. Two
 permission modes have no prompt to show. The hooks reference lists `bypassPermissions` and

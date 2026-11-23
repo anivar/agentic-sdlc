@@ -68,7 +68,8 @@ SUBSTITUTION_RE = re.compile(r"\$\(|`|<\(|__SUBST__")
 SUBST_PLACEHOLDER = "__SUBST__"
 REDIRECT_TOKENS = {"<", ">", ">>", "<<", "<<<", ">&", "<&", "&>", "&>>", ">|"}
 ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-HEREDOC_RE = re.compile(r"<<-?\s*(?P<q>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=q)")
+# A here-string (``<<<``) is not a heredoc: it reads no lines after the command.
+HEREDOC_RE = re.compile(r"(?<!<)<<(?!<)-?\s*(?P<q>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=q)")
 
 GIT_GLOBAL_WITH_ARG = {
     "-C",
@@ -370,6 +371,11 @@ class Facts:
         return _basename(rest[0]) if rest else ""
 
     @property
+    def sets_variables(self) -> set[str]:
+        """The variables this simple command sets for what it runs."""
+        return assigned_names(self.tokens)
+
+    @property
     def is_commit(self) -> bool:
         return self.kind == "git-commit"
 
@@ -565,13 +571,16 @@ def simple_commands(text: str) -> list[list[str]]:
     return out
 
 
-def _strip_wrappers(tokens: list[str]) -> list[str]:
-    """Drop variable assignments and wrapper programs (with their options) from the front."""
+def _strip_wrappers(tokens: list[str], assigned: set[str] | None = None) -> list[str]:
+    """Drop variable assignments and wrapper programs (with their options) from the front.
+    The names of the dropped assignments are added to ``assigned`` when it is given."""
     rest = list(tokens)
     hops = 0
     while rest and hops < 8:
         head = rest[0]
         if ENV_ASSIGN_RE.match(head):
+            if assigned is not None:
+                assigned.add(head.split("=", 1)[0])
             rest.pop(0)
             continue
         name = _basename(head)
@@ -596,6 +605,27 @@ def _strip_wrappers(tokens: list[str]) -> list[str]:
         if name == "timeout" and rest:
             rest.pop(0)
     return rest
+
+
+# Builtins that put a variable in the environment of the shell and of what it runs next.
+EXPORTERS = {"export", "declare", "typeset", "readonly", "local"}
+NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def assigned_names(tokens: list[str]) -> set[str]:
+    """The variables a simple command sets for what it runs: leading NAME=value words, the
+    NAME=value arguments of env and the other wrappers, and the names given to export,
+    declare, typeset, readonly or local. A word that only names a variable is not one."""
+    assigned: set[str] = set()
+    rest = _strip_wrappers(_strip_redirections(tokens), assigned)
+    if rest and _basename(rest[0]) in EXPORTERS:
+        for word in rest[1:]:
+            if word.startswith("-"):
+                continue
+            name = word.split("=", 1)[0]
+            if NAME_RE.match(name):
+                assigned.add(name)
+    return assigned
 
 
 def shell_inner(tokens: list[str]) -> str | None:

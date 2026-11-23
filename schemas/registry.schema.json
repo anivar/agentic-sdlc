@@ -63,11 +63,12 @@
             }
           },
           "decision": {
-            "description": "For hook rules: what the hook returns when the rule matches.",
+            "description": "For hook rules: what the hook returns when the rule matches. record: the call is allowed and the rule is written to the decision record.",
             "type": "string",
             "enum": [
               "deny",
-              "ask"
+              "ask",
+              "record"
             ]
           },
           "owner": {
@@ -120,6 +121,44 @@
                 }
               },
               "allow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "examples_unattended": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Commands that exercise the rule in an unattended run; the test suite feeds them to the guard with AGENTIC_SDLC_UNATTENDED=1 on branch agent/work, with unattended.push_branches set to [\"agent/*\"], and expects the keyed decision.",
+            "properties": {
+              "allow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deny": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "examples_agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Commands that exercise the rule in agent mode, the default; the test suite feeds them to the guard with AGENTIC_SDLC_MODE unset and expects the keyed decision.",
+            "properties": {
+              "allow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deny": {
                 "type": "array",
                 "items": {
                   "type": "string"

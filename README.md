@@ -21,7 +21,9 @@ enforce the rules an agent must not be able to talk its way past:
 - a **Claude Code hook** on every Bash command that refuses tool attribution, bulk staging,
   hook-bypass flags, force pushes to protected branches and staged secrets, and asks before every
   commit, push and post; the same hook asks before a credential file is read or the guard's own
-  configuration is edited through the file tools, and checks the commit that just landed;
+  configuration is edited through the file tools, and checks the commit that just landed. In
+  agent mode, the default, the agent answers each of those asks itself and the decision record
+  keeps the rule (AGENT-1); `"mode": "confirm"` puts a person in front of every ask;
 - **native git hooks** (`commit-msg`, `pre-commit`, `pre-push`) that hold the same attribution,
   secret and protected-branch rules for every other agent and every person, installed with one
   command or through the pre-commit framework;
@@ -107,11 +109,18 @@ not run Windows, so Windows behaviour is not verified on every change.
 | `thin-slices` | One pull request per step, nothing half-done, scope held, staging by path, a go-ahead per commit, push and post, secrets never printed | SLICE-1 to SLICE-8, STAGE-1, PUSH-1, PUSH-2, SECRET-1, SECRET-2, PROD-1, ASK-1 to ASK-3 |
 | `deep-modules` | The vocabulary and moves for deep modules: interface as the test surface, two adapters make a seam, design it twice with consent | DESIGN-1 to DESIGN-5 |
 | `setup-conventions` | One-time repository setup: the rules block, tracker and conventions files, the hook config, and the forge's check (workflow and ruleset, or the GitLab job) as a pull request | SETUP-1 to SETUP-3 |
+| `unattended-runs` | A run nobody watches: the launcher's signal so the guard never asks, a finish condition, a spend cap and a branch of its own, refused calls held for a person, and a run report in a file | RUN-1 to RUN-3 |
+| `session-handoff` | Work across sessions and compactions: a progress file and a JSON feature list, a start-up routine, one feature at a time passing on recorded evidence, settled decisions written when settled, lasting knowledge moved to the repository | HANDOFF-1 to HANDOFF-5 |
 
 ### Mechanisms
 
+Each row states what the rule decides in confirm mode. In agent mode, the default, a call marked
+**asks** runs and the decision record keeps the rule with AGENT-1; a call marked **denied** is
+still denied ([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
+
 | Rule | What happens | Where |
 |---|---|---|
+| AGENT-1 | in agent mode, the default, any call another rule **asks** about: **runs**, and the decision record keeps that rule beside AGENT-1; `"mode": "confirm"` in `.agentic-sdlc.json` or `AGENTIC_SDLC_MODE=confirm` turns it off, and an unknown value of the variable means confirm | hook |
 | ATTR-1 | any trailer naming a tool, a "Generated with" footer, or the robot emoji beside one, in a commit, pull request, issue or release text: **denied** | hook, before the command and again on the message at HEAD after a commit ran; git `commit-msg` hook; CI for pull request title, body and commits |
 | ATTR-2 | any vendor mention in change text when the repository opts into strict mode: **denied** | hook, git `commit-msg` hook, CI |
 | STAGE-1 | `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, `git commit -a`: **denied**; `git add -A src/` passes | hook |
@@ -119,11 +128,13 @@ not run Windows, so Windows behaviour is not verified on every change.
 | PUSH-2 | a force push of a tag: **asks**, and says that tag-triggered workflows run again | hook |
 | SECRET-1 | a key-shaped literal in the staged changes: **denied** (built-in patterns, plus TruffleHog's detectors when installed, over the added lines only) | hook, git `pre-commit` hook, CI |
 | ASK-1, ASK-2, ASK-3 | every `git commit`, `git push`, and every `gh`/`glab` command that creates or changes something on the forge: **asks**. A `gh`/`glab` subcommand the verb tables know as neither write nor read asks too ("review it yourself"), and a weekly CI job diffs the tables against the installed CLIs so a new write verb is caught. The forced prompt is documented for auto mode. In `bypassPermissions` and `dontAsk`, which cannot prompt, the hook returns a blocking error with the reason instead ([ADR 0005](docs/adr/0005-a-blocking-error-where-no-prompt-is-possible.md)); what each mode does is recorded in [`CHANGELOG.md`](CHANGELOG.md) as it is observed | hook |
-| TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper): **asks** | hook |
+| TRACE-1 | a command that mentions a commit, push, bulk add or forge write but cannot be traced to a `git`, `gh` or `glab` call (a variable, an interpreter, an unusual wrapper), or runs one inside a command or process substitution: **asks**. A command made only of `echo`, `printf`, `cat`, `head`, `tail`, `grep`, `rg`, `wc` or `ls` prints or searches the text and passes | hook |
 | TRACE-2 | a command the parser cannot trace at all, when the repository sets `trace.untracked` to ask or deny: **that decision**; a command made only of read-only programs passes | hook |
 | GUARD-1 | `--no-verify` or `commit -n`, a `git -c core.hooksPath=…`, `include.path=…` or alias override on the command line, or `git config` setting those keys: **denied** | hook |
 | GUARD-2 | an edit to `.agentic-sdlc.json`, a git hook, `.claude/settings.json`, `.claude/settings.local.json` or `.pre-commit-config.yaml` through the file tools: **asks** | hook, on Edit, Write and MultiEdit |
 | SECRET-3 | reading, grepping, copying or sending a file that holds credentials by name (`.env` files, private keys, `.netrc`, `.npmrc`, `credentials.json`, PEM and keystore files): **asks** | hook, on Bash, Read and Grep |
+| RUN-4 | a command that sets `AGENTIC_SDLC_UNATTENDED` (a leading assignment, `env`, `export`): **runs**, and the start is recorded; the run it starts follows RUN-1 | hook |
+| RUN-1 | in confirm mode, with `AGENTIC_SDLC_UNATTENDED` set in the environment of the Claude Code process (`.agentic-sdlc.json` cannot set it): no call **asks**. A commit on a branch that is not protected passes; a push passes only to a branch in `unattended.push_branches` that is not protected, with no force, tags, deletion or mirror; every other call that would ask is **denied** with a reason that tells the agent not to retry and to list the call in its run report ([ADR 0007](docs/adr/0007-an-unattended-run-never-waits-on-a-person.md)) | hook, opt-in |
 | VOICE-3 to VOICE-8 | dashes as punctuation, counting framings, closing offers, banned words in the prose a repository names through `voice-paths`: **fails the check** | CI, when `voice-paths` is set |
 
 The hook reads the command the agent is about to run, parses it (chains, pipes, heredocs,
@@ -131,13 +142,14 @@ message files, shell wrappers such as `sh -c` and `eval`, `git -C` and a leading
 returns one decision with the rule ids and the reason. Precedence is deny over ask over allow.
 Everything else runs without a decision from the hook.
 
-Every refusal and every ask ends with the rule's fix line. With `record.decisions` on, each
-decision is appended to `.git/agentic-sdlc/decisions.jsonl` as a hash of the command, the
+Every refusal and every ask ends with the rule's fix line. A decision the agent makes in place of
+a person (AGENT-1) and the start of an unattended run (RUN-4) are always appended to
+`.git/agentic-sdlc/decisions.jsonl`; with `record.decisions` on, every decision is. An entry is a hash of the command, the
 decision, the rule ids, the permission mode and the milliseconds, never the command text;
 `record.shadow` records and lets everything through, which is how a team sees what the hook
 would refuse before it refuses anything. `agentic-sdlc log` prints the record.
 
-What a refusal looks like:
+What the guard prints in agent mode, the default:
 
 ```
 $ agentic-sdlc guard 'git add -A'
@@ -160,13 +172,18 @@ deny: GUARD-1, ASK-1
   ASK-1: A commit waits for a go-ahead: commit needs your go-ahead. Fix: Show the staged change and the message; commit when the user says yes.
 
 $ agentic-sdlc guard 'cat .env'
-ask: SECRET-3
+allow: SECRET-3, AGENT-1
   SECRET-3: Reading a secret file asks: .env holds credentials by name. Fix: Name the variable or the file and its length or hash instead; read the file only when the user says yes.
+  AGENT-1: The agent decides; the guard records what it would have asked: recorded, not asked
 
 $ agentic-sdlc guard 'gh pr merge 12 --squash'
-ask: ASK-3
+allow: ASK-3, AGENT-1
   ASK-3: A post waits for a go-ahead: gh pr merge publishes or changes something on the forge. Fix: Show the draft in the conversation; post when the user says yes.
+  AGENT-1: The agent decides; the guard records what it would have asked: recorded, not asked
 ```
+
+In confirm mode the deny lines are the same, and the last two calls print `ask: SECRET-3` and
+`ask: ASK-3` and wait for a person.
 
 ### What the mechanisms do not cover
 
@@ -177,6 +194,7 @@ ask: ASK-3
 | Commit-message rules on the forge | GitHub rulesets offer metadata rules on the Enterprise plan only | the required status check from the workflow |
 | A user who sets `disableAllHooks`, or a mod that approves after the hook | the hook is a plugin hook, not a managed one | the CI check; the ruleset |
 | Modes that cannot prompt (`bypassPermissions`, `dontAsk`) | an `ask` has nowhere to go there | the hook returns a blocking error with the reason in those modes; observed in print mode on 2026-10-10 ([`CHANGELOG.md`](CHANGELOG.md)): the block held for the commit, the secret file and the Read tool in both |
+| The unattended signal | it is an environment variable of the Claude Code process: a background session takes its supervisor's environment, and a repository's committed `.claude/settings.json` `env` block may set it (inferred from the documentation, not tested) | the guard still refuses a commit on a protected branch and every push outside `unattended.push_branches`; committed config can already remove the asks with `confirm.scope: off` |
 | The interactive prompt under `acceptEdits` and auto | the documentation states the auto-mode behaviour; print mode refuses an ask in both ([`CHANGELOG.md`](CHANGELOG.md)) | recorded once observed interactively; `docs/verification.md` is the procedure |
 | A gated command the parser cannot see: a git call inside an interpreter (`python -c`, `node -e`), behind a shell alias or a variable (`$g push`), or a direct API call with `curl` | the parser follows wrappers, substitutions and `cd`, not program semantics | TRACE-1 asks when the text still names the operation, and the pre-check names the inline interpreter shapes; `trace.untracked` at ask or deny closes the hole for everything else the parser cannot trace; `posting.extra_commands` can name `curl`; the CI check and the ruleset are the backstops |
 | Message text built by a substitution (`-m "$(cat m.txt)"`, `--file=<( … )`) | the text does not exist until the command runs | the ask names it; after the commit ran, the hook compares HEAD with the sha recorded before the command and reads the message that landed, so a backdated commit is still reported with the instruction to amend (when nothing was recorded, a 300-second timestamp guess stands in as the weak fallback); the pull request check scans the resulting commits |
@@ -215,6 +233,7 @@ a default; an absent file means the defaults.
 
 | Key | Default | Rule |
 |---|---|---|
+| `mode` | `"agent"`: the agent answers every ask and the record keeps the rule; `"confirm"`: a person answers. `AGENTIC_SDLC_MODE` overrides the file | AGENT-1 |
 | `protected_branches` | `["main", "master"]` | PUSH-1 |
 | `attribution.mode` | `"patterns"`; `"strict"` refuses any vendor mention | ATTR-1, ATTR-2 |
 | `attribution.vendors` | adds to the built-in names | ATTR-1, ATTR-2 |
@@ -223,9 +242,10 @@ a default; an absent file means the defaults.
 | `confirm.quiet_rules` | `[]`; entries `{rule, until}` silence a named ask rule until a UTC date. A deny rule is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason | the ask rules |
 | `stage.deny_add_all`, `stage.deny_commit_all` | `true` | STAGE-1 |
 | `trace.untracked` | `"allow"`; `"ask"` or `"deny"` answers with that decision for a command the parser cannot trace to git, gh or glab; a command made only of read-only programs still passes | TRACE-2 |
+| `unattended.push_branches` | `[]`; glob patterns such as `"agent/*"` for the branches an unattended run may push to. A protected branch never matches. Empty refuses every push | RUN-1 |
 | `secrets.scan_staged`, `secrets.scanner`, `secrets.extra_patterns` | `true`, `"trufflehog"` (or `"none"`), `[]`; the 1.0 key `use_gitleaks` still reads, with a warning | SECRET-1 |
 | `posting.extra_commands` | `[]`; regular expressions that count as a post | ASK-3 |
-| `record.decisions`, `record.shadow`, `record.path` | `false`, `false`, `<git common dir>/agentic-sdlc/decisions.jsonl`; `AGENTIC_SDLC_RECORD=1` and `AGENTIC_SDLC_SHADOW=1` override for one session | the decision record ([ADR 0006](docs/adr/0006-the-decision-record-holds-a-hash-not-the-command.md)); shadow records and lets every command through |
+| `record.decisions`, `record.shadow`, `record.path` | `false`, `false`, `<git common dir>/agentic-sdlc/decisions.jsonl`; `AGENTIC_SDLC_RECORD=1` and `AGENTIC_SDLC_SHADOW=1` override for one session; AGENT-1 and RUN-4 decisions are kept whatever `record.decisions` says | the decision record ([ADR 0006](docs/adr/0006-the-decision-record-holds-a-hash-not-the-command.md)); shadow records and lets every command through |
 
 ## Adopting it in a repository
 

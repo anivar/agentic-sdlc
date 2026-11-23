@@ -134,6 +134,21 @@
         }
       }
     },
+    "unattended": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a run may do when whoever launched it set AGENTIC_SDLC_UNATTENDED (RUN-1). This file cannot switch that mode on; only the launcher's environment can.",
+      "properties": {
+        "push_branches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns (fnmatch) for branches an unattended run may push to without a go-ahead, for example \"agent/*\". A protected branch never matches. Force pushes, tags and deletions are always refused. Empty: every push is refused."
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "additionalProperties": false,
@@ -203,6 +218,14 @@
           "description": "Where the record goes; empty means <git common dir>/agentic-sdlc/decisions.jsonl."
         }
       }
+    },
+    "mode": {
+      "description": "Who answers a call a rule would ask about. agent (the default): the agent decides, and the guard records the rule with AGENT-1. confirm: a person answers every ask, and in a run marked AGENTIC_SDLC_UNATTENDED the ask is refused (RUN-1). AGENTIC_SDLC_MODE overrides this.",
+      "enum": [
+        "agent",
+        "confirm"
+      ],
+      "default": "agent"
     }
   }
 }
