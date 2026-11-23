@@ -66,6 +66,14 @@ This release breaks existing behaviour: the guard's default is agent mode
   (google/elephant-goldfish-model, Apache-2.0) in this repository's words; the registry notes say
   so on each rule. Its multi-stage reviewer swarm, personas and unranked-options rule are not
   taken: one reader is the default, and grill-plan keeps its recommended answer.
+- `check-skills` checks each skill against the Agent Skills specification: the name's hyphens,
+  frontmatter keys outside the specification (except `argument-hint` and
+  `disable-model-invocation`), a `compatibility` value over 500 characters, a `metadata` value
+  that is not a string, a SKILL.md of 500 lines or more, a reference over 100 lines with no
+  contents heading, and a fence nested inside a fence of the same length. AGENTS.md rule 6 states
+  the limits.
+- test-first: `references/property-tests.md`, on when and how to write a property test, with a
+  library per language and a seeded loop where no library fits.
 
 ### Fixed
 
