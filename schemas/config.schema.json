@@ -220,7 +220,7 @@
       }
     },
     "mode": {
-      "description": "Who answers a call a rule would ask about. agent (the default): the agent decides, and the guard records the rule with AGENT-1. confirm: a person answers every ask, and in a run marked AGENTIC_SDLC_UNATTENDED the ask is refused (RUN-1). AGENTIC_SDLC_MODE overrides this.",
+      "description": "Who answers a call a rule would ask about. agent (the default): the agent decides, and the guard records the rule with AGENT-1. confirm: a person answers every ask, and in a run marked AGENTIC_SDLC_UNATTENDED the ask is refused (RUN-1). AGENTIC_SDLC_MODE overrides this. An unknown value, or a file the guard cannot read, means confirm.",
       "enum": [
         "agent",
         "confirm"

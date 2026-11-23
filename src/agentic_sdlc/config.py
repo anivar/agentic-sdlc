@@ -229,9 +229,11 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         problems.append("attribution must be an object")
 
     mode = data.get("mode", "agent")
-    if mode in MODES:
+    if isinstance(mode, str) and mode in MODES:
         cfg.mode = mode
     else:
+        # A typo fails toward a person, as an unknown value in the environment does.
+        cfg.mode = "confirm"
         problems.append("mode must be agent or confirm")
 
     confirm = data.get("confirm") or {}
@@ -458,15 +460,16 @@ def load(cwd: Path) -> Config:
 
 
 def _parse_file(path: Path) -> Config:
+    """A file the guard cannot read may have set confirm mode, so it means confirm until fixed."""
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, ValueError) as exc:
-        cfg = Config(source=path)
+        cfg = Config(source=path, mode="confirm")
         cfg.problems.append(f"{path.name} unreadable: {exc}")
         return cfg
     if not isinstance(data, dict):
-        cfg = Config(source=path)
+        cfg = Config(source=path, mode="confirm")
         cfg.problems.append(f"{path.name} must hold a JSON object")
         return cfg
     return from_dict(data, path)
