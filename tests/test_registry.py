@@ -85,3 +85,21 @@ def test_schema_and_registry_agree_on_mechanisms():
         schema["properties"]["rules"]["items"]["properties"]["mechanisms"]["items"]["enum"]
     )
     assert allowed == registry.MECHANISMS
+
+
+def test_the_wheel_copy_of_the_registry_matches_the_specification():
+    """A wheel has no rules/ folder, so the package carries a copy; `agentic-sdlc coverage`
+    writes it and CI refuses a stale one."""
+    packaged = ROOT / "src" / "agentic_sdlc" / "registry.json"
+    assert packaged.read_bytes() == (ROOT / "rules" / "registry.json").read_bytes()
+
+
+def test_an_installed_wheel_reads_its_packaged_registry(monkeypatch, tmp_path: Path):
+    """Outside a checkout or the plugin the specification path does not exist; the refusal
+    still carries its fix and its title."""
+    monkeypatch.setattr(registry, "REGISTRY_PATH", tmp_path / "rules" / "registry.json")
+    assert registry.fixes().get("STAGE-1")
+    assert (
+        registry.titles().get("AGENT-1")
+        == registry.by_id(ROOT / "rules" / "registry.json")["AGENT-1"]["title"]
+    )
