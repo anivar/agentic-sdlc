@@ -3,8 +3,8 @@ name: thin-slices
 description: >
   Land work as thin, complete, reviewable slices: one pull request per plan step, nothing
   half-done on the shared branch, scope held to the step, verification run once per change,
-  staging by path with the index read before the commit, a go-ahead for every commit, push and
-  post, no force push to a protected branch, no key-shaped literals, no secret ever printed,
+  staging by path with the index read before the commit, each commit, push and post decided on
+  its own (by the agent and recorded, or by a person in confirm mode), no force push to a protected branch, no key-shaped literals, no secret ever printed,
   production read-only. This is the execution discipline the hook enforces.
   Triggers on: "implement the next step", "land this", "next step from the plan", "ship this
   slice", "ready to commit", "open a PR", "is it ready to merge", "what should I stage".
@@ -16,7 +16,7 @@ metadata:
   version: 1.0.0
   tags: implementation, git, pull-requests, staging, secrets, incremental
   derived_from: incremental-implementation (addyosmani/agent-skills, MIT) for the slice cycle and scope discipline; the git, secret and go-ahead rules are the author's own
-  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 SECRET-3 PROD-1 ASK-1 ASK-2 ASK-3 TRACE-1 TRACE-2 GUARD-1 REVIEW-6 TEST-5 ATTR-1 TICKET-3 TICKET-4
+  rules: SLICE-1 SLICE-2 SLICE-3 SLICE-4 SLICE-5 SLICE-6 SLICE-7 SLICE-8 STAGE-1 PUSH-1 PUSH-2 SECRET-1 SECRET-2 SECRET-3 PROD-1 ASK-1 ASK-2 ASK-3 AGENT-1 TRACE-1 TRACE-2 GUARD-1 REVIEW-6 TEST-5 ATTR-1 TICKET-3 TICKET-4
 ---
 
 # Thin slices
@@ -34,7 +34,7 @@ that keep a change small enough to review.
 | SLICE-3 | Scope discipline | Only what the step requires. Note adjacent cleanups, unused imports, old syntax; leave them for their own step. |
 | SLICE-4 | Verify once per change | Run each check after a change that could affect it. A pass on unchanged code is not repeated. |
 | SLICE-5 | Stage by path and read the index | `git add <path>`; when another session may have touched a file, re-read `git diff <file>` and stage whole files by path, or the hunks with `git apply --cached <patch>`; read `git diff --cached --stat` before committing. Never `git add -A` (STAGE-1, hook deny). |
-| SLICE-6 | A go-ahead per commit, per push, per post | Each waits for its own yes. Approval for one does not extend to the next (ASK-1, ASK-2, ASK-3, hook ask). |
+| SLICE-6 | A go-ahead per commit, per push, per post | Each is decided on its own, and a decision for one does not extend to the next. In agent mode, the default, the agent decides and the decision record keeps the rule (ASK-1, ASK-2, ASK-3 with AGENT-1). In confirm mode each waits for a person's yes (hook ask). |
 | SLICE-7 | Auto-merge only where allowed | Armed only where the decider allowed it for that repository and branch. A merge to a release branch is a deliberate human act. |
 | SLICE-8 | Fresh new files, confirmed deletions | Check the path is absent before writing a new file. Check a file is untracked before deleting it, or get the deletion confirmed. |
 | STAGE-1 | Stage by path | Hook: `git add -A`, `--all` or `-u` without a narrowing path, a root pathspec such as `.`, and `git commit -a` are refused. `git add -A src/` passes. |
@@ -45,7 +45,7 @@ that keep a change small enough to review.
 | PROD-1 | Production is read-only | Unless the decider says otherwise for that action. The production targets are the ones `docs/agents/conventions.md` names. |
 | REVIEW-6 | Confirm the diff is absent before merging | And re-diff a conflict resolution against the target's current file. |
 | TEST-5 | Gate on exit codes | `check && test`, then the commit on its go-ahead, gated on the exit codes. |
-| TRACE-1 | An untraceable gated command is confirmed | Hook: a command that mentions a commit, push, bulk add or forge write the parser cannot trace (a variable, an interpreter, an unusual wrapper) asks. |
+| TRACE-1 | An untraceable gated command is confirmed | Hook: a command that mentions a commit, push, bulk add or forge write the parser cannot trace (a variable, an interpreter, an unusual wrapper), or runs one inside a substitution, asks. Printing or searching for one (`rg "git push"`, a held call written with `printf`) passes. |
 | TRACE-2 | An untraced command is suspicious when configured | Hook: with `trace.untracked` at ask or deny, a command the parser cannot trace to git, gh or glab gets that decision; a command made only of read-only programs passes. |
 
 ## The cycle
@@ -84,7 +84,8 @@ no tool trailer, no generated-with footer (ATTR-1).
 5. Say what it does, why, and what it leaves out: "Rejects a page token with 400 and a
    `page_token_unsupported` code. Pagination itself is still not implemented; that is P2.4."
 6. On the go-ahead: `git commit -m "Reject a page token on search with 400"` (`-s` where the
-   repository requires a sign-off). The hook asks (ASK-1), the decider answers, the commit runs.
+   repository requires a sign-off). In agent mode the commit runs and the record keeps ASK-1 with AGENT-1; in confirm mode the hook
+   asks (ASK-1) and the decider answers.
    No trailer names a tool (ATTR-1).
 7. On the next go-ahead: `git push`, a pull request with the same three sentences, the review
    from `review-change`, merge when the checks pass. Then P2.4.

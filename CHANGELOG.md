@@ -1,5 +1,105 @@
 # Changelog
 
+## 2.0.0 (2026-11-24)
+
+This release breaks existing behaviour: the guard's default is agent mode
+([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
+
+### Changed
+
+- Agent mode is the default. A call that a rule would ask about runs, and the decision record
+  keeps that rule with AGENT-1: commits, pushes and posts (ASK-1, ASK-2, ASK-3), a moved tag
+  (PUSH-2), an untraced gated command (TRACE-1). A read of a secret-named file (SECRET-3) and an
+  edit of the guard's configuration (GUARD-2) still ask, because such an edit can switch every
+  refusal off; with `AGENTIC_SDLC_UNATTENDED` set they are refused (RUN-1). The refusals stay:
+  bulk staging (STAGE-1), hook bypass (GUARD-1), a force push or delete of a protected branch
+  (PUSH-1), attribution (ATTR-1, ATTR-2), a staged secret (SECRET-1). A plain push to a protected
+  branch runs and is recorded.
+- `"mode": "confirm"` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_MODE=confirm`, keeps the 1.x
+  behaviour. The variable overrides the file. An unknown value in either, or a configuration file
+  the guard cannot read, means confirm.
+- The decision record keeps every AGENT-1 and RUN-4 decision whatever `record.decisions` says;
+  other decisions follow the setting.
+- The PyPI distribution is `agentic-sdlc-guard`. The PyPI project named `agentic-sdlc` is a
+  different project: the 1.1.0 upload was refused, and `uvx agentic-sdlc`, which the README
+  showed, ran that other package. The command stays `agentic-sdlc` and the import stays
+  `agentic_sdlc`; the README runs the command with `uvx --from agentic-sdlc-guard`.
+- The reusable workflow no longer declares the `GITLEAKS_LICENSE` secret, as 1.1.0 announced. A
+  caller that still passes it must drop it.
+
+### Added
+
+- The `unattended-runs` skill with RUN-1 to RUN-3
+  ([ADR 0007](docs/adr/0007-an-unattended-run-never-waits-on-a-person.md)). In confirm mode, with
+  `AGENTIC_SDLC_UNATTENDED` set by the launcher, no call asks: a commit on a branch that is not
+  protected passes, a push passes only to a branch in `unattended.push_branches`, and every other
+  ask is refused with a reason the agent acts on.
+- RUN-4: a command that sets `AGENTIC_SDLC_UNATTENDED` is recorded, and neither asked about nor
+  refused.
+- The `session-handoff` skill with HANDOFF-1 to HANDOFF-5: work stays coherent across sessions,
+  compactions and full context windows through a progress file and a JSON feature list. Each
+  session takes one feature and ends with a checkpoint commit.
+- Registry: `record` as a hook decision, and the `examples_unattended` and `examples_agent`
+  example sets, each decided as written on every `just check`.
+- REVIEW-11: before a plan or design the agent drafted goes to the decider for approval, one
+  fresh reader reads it: a subagent that has the document (its path, or its text verbatim when it
+  exists only in the conversation), the decider's ask verbatim, and the repository, and nothing
+  else from the drafting conversation. The reader paraphrases the document before any finding,
+  and a paraphrase that differs from the intent is a finding against the document. It checks each
+  claim that something exists now, treats a contradiction as blocking and a proposed file as no
+  finding, lists each claim it could not open as not checked, and lists the decisions an
+  implementer would have to make that the document does not record; in a plan those become open
+  Decisions rows (PLAN-7). More than one reader needs the decider's agreement; with no subagent,
+  or after two failures, the review is reported as a self-review only. The brief to hand over is
+  `skills/review-change/references/fresh-reader.md`.
+- REVIEW-12: every finding on the author's own work gets one answer: fixed, accepted with the
+  change proposed, refuted with evidence the reviewer could have read, given to the decider when
+  the evidence lies outside the reviewer's reach, or declined in one line (a nitpick, or a
+  cosmetic bot suggestion as REVIEW-5 already allows). A comprehension gap is never refuted and
+  the author never changes a label or decoration. Every answer goes in front of the decider, so a
+  reviewer's point stays open until the decider has seen it (VOICE-9); a refutation the decider
+  did not overrule stays settled across rounds, a fixed finding raised again re-opens, and a
+  reviewer that returned nothing is reported as not run. REVIEW-5's statement is unchanged; its
+  "refuted with evidence" now means what REVIEW-12 defines, and a bot thread given to the decider
+  stays unresolved until the decider answers.
+- PLAN-10: before a plan is shown it is compared with the ask and each contradiction is quoted on
+  both sides. A slip is corrected to match the ask; a deliberate departure becomes a Decisions row
+  with who decides and by when (PLAN-7). An addition that changes an interface, a dependency or
+  what ships is listed.
+- `evals/draft-goes-to-a-fresh-reader/`: given a plan with a planted contradiction (limits per
+  key, counting per IP), the agent hands the text to a reader inside `BEGIN DOCUMENT` markers,
+  reports the paraphrase, the unrecorded decisions and the findings, and answers each finding
+  without claiming a fix it was not allowed to make.
+- These three rules restate ideas from the Elephant-Goldfish Model
+  (google/elephant-goldfish-model, Apache-2.0) in this repository's words; the registry notes say
+  so on each rule. Its multi-stage reviewer swarm, personas and unranked-options rule are not
+  taken: one reader is the default, and grill-plan keeps its recommended answer.
+- `check-skills` checks each skill against the Agent Skills specification: the name's hyphens,
+  frontmatter keys outside the specification (except `argument-hint` and
+  `disable-model-invocation`), a `compatibility` value over 500 characters, a `metadata` value
+  that is not a string, a SKILL.md of 500 lines or more, a reference over 100 lines with no
+  contents heading, and a fence nested inside a fence of the same length. AGENTS.md rule 6 states
+  the limits.
+- test-first: `references/property-tests.md`, on when and how to write a property test, with a
+  library per language and a seeded loop where no library fits.
+
+### Fixed
+
+- `.claude-plugin/plugin.json` carried `"version": "1.0.0"` through the 1.1.0 release. Claude
+  Code keys an installed plugin's cache on that string, so a copy installed from the marketplace
+  stayed on the 1.0.0 files and never received the 1.1.0 hook and skill changes. The manifest now
+  carries the release version. `tests/test_manifests.py` fails when the manifest version and the
+  `pyproject.toml` version differ, and `release.yml` refuses a tag that differs from either
+  before it writes the release or publishes to PyPI.
+
+### Verified
+
+- Print-mode runs with Claude Code, 2026-11-22: the confirm-mode unattended rows of
+  `docs/verification.md`, seven of seven as written.
+- Print-mode runs with Claude Code 2.1.330, 2026-11-23, no mode set: a push to `main` ran and
+  `agentic-sdlc log` named ASK-2 and AGENT-1; a command starting an unattended child ran and the
+  log named RUN-4.
+
 ## 1.1.0 (2026-10-14)
 
 ### Added

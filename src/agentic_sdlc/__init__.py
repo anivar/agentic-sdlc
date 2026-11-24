@@ -8,6 +8,6 @@ rules in ``rules/registry.json``. The Claude Code hook (``hook.py``) and the CI 
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("agentic-sdlc")
+    __version__ = version("agentic-sdlc-guard")
 except PackageNotFoundError:  # running from a source checkout without installation
     __version__ = "0.0.0+dev"

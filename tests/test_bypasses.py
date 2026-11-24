@@ -178,3 +178,71 @@ def test_robot_emoji_only_counts_beside_a_footer_or_vendor(repo: Path):
 def test_command_v_is_not_a_wrapper():
     parsed = command_mod.parse("command -v git")
     assert parsed.commands[0].kind == "other"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        'cat "$(git push origin main)"',
+        "echo `git push origin main`",
+        "head -1 <(gh pr create --title x --body y)",
+        "tail -f x > >(gh pr create --title t --body b)",
+        "cat <<EOF\n`git push origin main`\nEOF",
+        'echo "$(date) $(git commit -m x)"',
+        "cat <<EOF\n'$(git push origin main)'\nEOF",
+        "cat <<EOF\ndon't\n$(git push origin main)\nEOF",
+        "echo hi # don't\necho $(git push origin main)",
+        "echo it's $(git push origin main)",
+        'echo "<<X"\ngit push origin main\nX',
+    ],
+)
+def test_a_gated_command_inside_a_substitution_asks(repo: Path, raw: str):
+    """The shell runs a substitution's body; a program that only prints its arguments does not
+    make the body text."""
+    decision = guard.decide(raw, repo, NO_SCANNER)
+    assert decision.permission == "ask" and "TRACE-1" in decision.rules, raw
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        'rg -n "git push" docs',
+        "grep -rn 'git commit' src | head -5",
+        "printf '| git push origin main | RUN-1 |\\n' >> .agent/progress.md",
+        "echo 'gh pr create' | wc -l",
+        "cat >> .agent/progress.md <<'EOF'\n| `git push origin main` | RUN-1 |\nEOF",
+        "cat >> .agent/progress.md <<EOF\n| git push origin main | held, don't retry |\nEOF",
+        'echo "$(date) held: git push origin main" >> .agent/progress.md',
+        'echo "$(gh pr view 12 --json title)"',
+        'git log "$(git merge-base HEAD origin/main)"..HEAD',
+    ],
+)
+def test_printing_or_searching_for_a_gated_command_is_not_a_call(repo: Path, raw: str):
+    """A search for "git push", or a held call written into a run report, runs nothing."""
+    assert guard.decide(raw, repo, NO_SCANNER).permission == "allow", raw
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "echo 'git push origin main' | sh",
+        "rg --pre ./x 'git push' .",
+        "env -S 'git push origin main'",
+        r"find . -name x -exec git push \;",
+    ],
+)
+def test_text_that_reaches_a_runner_still_asks(repo: Path, raw: str):
+    decision = guard.decide(raw, repo, NO_SCANNER)
+    assert decision.permission == "ask" and "TRACE-1" in decision.rules, raw
+
+
+def test_a_substituted_commit_message_is_not_a_hidden_call(repo: Path):
+    decision = guard.decide('git commit -m "$(cat msg.txt)"', repo, NO_SCANNER)
+    assert "TRACE-1" not in decision.rules
+
+
+def test_a_here_string_is_not_a_heredoc(repo: Path):
+    """``<<<`` reads no lines, so the line after it is a command, not a heredoc body."""
+    decision = guard.decide("cat <<<x\ngit push origin main", repo, NO_SCANNER)
+    assert decision.permission == "ask" and "ASK-2" in decision.rules
+    assert command_mod.parse("tr a b <<<x").heredocs == []

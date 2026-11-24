@@ -19,6 +19,9 @@ Contributions are welcome, however they were produced; a person signs off each c
 The maintainer merges. Discussion happens on the pull request; a decision that is hard to reverse
 is recorded under `docs/adr/`.
 
-Releasing: rename the `## x.y.z (unreleased)` heading in `CHANGELOG.md` to `## x.y.z`, commit,
-tag `vx.y.z` (signed) and push the tag. The release workflow writes the GitHub release from that
-section the first time the tag exists; a moved tag does not run it again.
+Releasing: rename the `## x.y.z (unreleased)` heading in `CHANGELOG.md` to `## x.y.z`, set
+`x.y.z` as the version in `pyproject.toml` and in `.claude-plugin/plugin.json`, commit, tag
+`vx.y.z` (signed) and push the tag. The release workflow refuses a tag that differs from either
+version, then writes the GitHub release from that section the first time the tag exists; a
+moved tag does not run it again. The manifest version is what makes an installed plugin update:
+while it stays the same, Claude Code keeps the cached copy.

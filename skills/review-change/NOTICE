@@ -19,3 +19,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Separately, the fresh-context reader, the paraphrase before findings and the answer kinds (REVIEW-11, REVIEW-12) restate ideas from the Elephant-Goldfish Model
+(google/elephant-goldfish-model), Copyright 2026 Google LLC, Apache-2.0. No text from it is
+copied, so its licence text is not reproduced here; rules/registry.json notes each rule that
+restates it.

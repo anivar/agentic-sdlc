@@ -19,10 +19,19 @@ ID_RE = re.compile(r"^[A-Z]+-[0-9]+$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 OWNER_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 MECHANISMS = {"hook", "githook", "ci", "ruleset", "skill"}
-DECISIONS = {"deny", "ask"}
+DECISIONS = {"deny", "ask", "record"}
 STATUSES = {"active", "deprecated"}
 REQUIRED = ("id", "title", "statement", "mechanisms", "owner", "since", "status")
-OPTIONAL = ("decision", "opt_in", "replaced_by", "notes", "fix", "examples")
+OPTIONAL = (
+    "decision",
+    "opt_in",
+    "replaced_by",
+    "notes",
+    "fix",
+    "examples",
+    "examples_unattended",
+    "examples_agent",
+)
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
@@ -89,9 +98,9 @@ def validate(data: dict[str, Any]) -> list[str]:
         ):
             problems.append(f"{where}: mechanisms must be a unique subset of {sorted(MECHANISMS)}")
         elif "hook" in mechanisms and rule.get("decision") not in DECISIONS:
-            problems.append(f"{where}: a hook rule needs decision deny or ask")
+            problems.append(f"{where}: a hook rule needs decision deny, ask or record")
         if "decision" in rule and rule["decision"] not in DECISIONS:
-            problems.append(f"{where}: decision must be deny or ask")
+            problems.append(f"{where}: decision must be deny, ask or record")
         owner = rule.get("owner", "")
         if not isinstance(owner, str) or not OWNER_RE.match(owner):
             problems.append(f"{where}: owner must be a skill name")
@@ -110,16 +119,23 @@ def validate(data: dict[str, Any]) -> list[str]:
             problems.append(f"{where}: opt_in must be boolean")
         if "fix" in rule and (not isinstance(rule["fix"], str) or len(rule["fix"]) < 10):
             problems.append(f"{where}: fix must be a sentence")
-        examples = rule.get("examples")
-        if examples is not None:
-            allowed = DECISIONS | {"allow"}
+        # An unattended run (RUN-1) never asks, so its examples are only allow or deny. Agent mode
+        # (AGENT-1) asks only for the kept asks (GUARD-2, SECRET-3).
+        for key, allowed in (
+            ("examples", {"deny", "ask", "allow"}),
+            ("examples_unattended", {"deny", "allow"}),
+            ("examples_agent", {"deny", "ask", "allow"}),
+        ):
+            examples = rule.get(key)
+            if examples is None:
+                continue
             if not isinstance(examples, dict) or any(k not in allowed for k in examples):
-                problems.append(f"{where}: examples keys must be deny, ask or allow")
+                problems.append(f"{where}: {key} keys must be {' or '.join(sorted(allowed))}")
             elif any(
                 not isinstance(v, list) or not all(isinstance(c, str) for c in v)
                 for v in examples.values()
             ):
-                problems.append(f"{where}: each examples entry is a list of commands")
+                problems.append(f"{where}: each {key} entry is a list of commands")
     return problems
 
 
@@ -155,4 +171,5 @@ FALLBACK_TITLES = {
     "TRACE-2": "An untraced command is suspicious when configured",
     "GUARD-1": "Hook bypass flags are refused",
     "GUARD-2": "The guard's own configuration is changed knowingly",
+    "RUN-1": "An unattended run never waits on a person",
 }

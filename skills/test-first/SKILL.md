@@ -40,7 +40,8 @@ section applies on every cycle. Read the glossary first so test names use the pr
 It verifies behaviour through the public interface (DESIGN-2). It reads like a specification:
 "user can check out with a valid cart" says what capability exists, and survives refactors
 because it does not care about internal structure. Examples and anti-patterns are in
-`references/good-and-bad-tests.md`.
+`references/good-and-bad-tests.md`. Where a rule holds for every input, write a property test;
+how, and the library for each language, are in `references/property-tests.md`.
 
 ## Anti-patterns
 

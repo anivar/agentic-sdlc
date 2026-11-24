@@ -16,7 +16,7 @@ def test_registry_is_valid():
 def test_hook_rules_carry_a_decision():
     for rule in registry.rules():
         if "hook" in rule["mechanisms"]:
-            assert rule.get("decision") in ("deny", "ask"), rule["id"]
+            assert rule.get("decision") in ("deny", "ask", "record"), rule["id"]
 
 
 def test_owners_are_published_skills_once_skills_exist():

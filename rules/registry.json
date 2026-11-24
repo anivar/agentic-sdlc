@@ -595,6 +595,30 @@
       "status": "active"
     },
     {
+      "id": "REVIEW-11",
+      "title": "A fresh reader reviews a draft",
+      "statement": "A plan or design the agent drafted MUST be read by a reader in a fresh context before it goes to the decider for approval: one subagent that receives the document (its path, or its text verbatim when it exists only in the conversation), the decider's ask verbatim when there is one, read access to the repository and the document's sources when they exist, and nothing else from the drafting conversation. More than one reader needs the decider's agreement. The reader paraphrases the document before any finding, and a wrong paraphrase is itself a finding. When no subagent can run, or the reader fails twice, the review is reported as a self-review only (REVIEW-7).",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "The fresh-context reviewer and the paraphrase-first read follow the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0), restated; no text is copied. That model runs several reviewers per stage; one reader is the default here."
+    },
+    {
+      "id": "REVIEW-12",
+      "title": "Every finding gets one answer",
+      "statement": "Each finding on the author's own work MUST get exactly one answer: fixed (the change is made); accepted (the finding is right and the exact change is proposed, when the author may not edit); refuted with evidence the reviewer could have read; given to the decider when the only evidence lies outside what the reviewer could read; or declined in one line, for a finding the reviewer labelled nitpick or a cosmetic bot suggestion (REVIEW-5). The author MUST NOT refute a comprehension gap, change a finding's label or decoration, or add text only to satisfy a reviewer. Every answer is shown to the decider (VOICE-9). A refutation the decider saw and did not overrule, or a finding the decider accepted as a known risk, stays settled across rounds; a fixed finding raised again at the same place re-opens; a reviewer that failed or returned nothing is reported as not run, never as no findings.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "The answer kinds and the settled-finding rules follow egm-resolve and egm-review-loop in the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0), restated; no text is copied."
+    },
+    {
       "id": "PLAN-1",
       "title": "One plan file, dated steps with done-when",
       "statement": "A plan MUST be one file per project or topic, with dated steps of at most three days, each with one owner, a date the owner named, and a \"done when\" someone else can check. Each step is reversible or says how it is undone.",
@@ -692,6 +716,18 @@
       "owner": "plan-project",
       "since": "1.0.0",
       "status": "active"
+    },
+    {
+      "id": "PLAN-10",
+      "title": "Reconcile the plan with the ask",
+      "statement": "Before a plan is shown, it MUST be compared with the ask it answers, and every contradiction is listed with both texts quoted. A slip in the plan is corrected to match the ask; a deliberate departure becomes a Decisions row with options, who decides and by when (PLAN-7). An addition is listed when it changes an interface, a dependency or what ships.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "Follows the check of a draft against its brief in egm-draft (Elephant-Goldfish Model, google/elephant-goldfish-model, Apache-2.0), restated; no text is copied."
     },
     {
       "id": "GRILL-1",
@@ -1161,7 +1197,7 @@
     {
       "id": "TRACE-1",
       "title": "An untraceable gated command is confirmed",
-      "statement": "When a command mentions a commit, a push, a bulk add or a forge write but the parser cannot trace it to a git, gh or glab invocation (a variable, an interpreter, an unusual wrapper), the command MUST be confirmed by the user before it runs.",
+      "statement": "When a command mentions a commit, a push, a bulk add or a forge write but the parser cannot trace it to a git, gh or glab invocation (a variable, an interpreter, an unusual wrapper), the command MUST be confirmed by the user before it runs. A gated command inside a command or process substitution counts as a call. A command made only of programs that print or search their arguments, with no substitution, is text, not a call, and needs no confirmation.",
       "mechanisms": [
         "hook",
         "skill"
@@ -1173,7 +1209,13 @@
       "fix": "Run the git, gh or glab command directly so the hook can read it, or confirm this one yourself.",
       "examples": {
         "ask": [
-          "some-tool --run \"git commit -m x\""
+          "some-tool --run \"git commit -m x\"",
+          "cat \"$(git push origin main)\"",
+          "echo 'git push origin main' | sh"
+        ],
+        "allow": [
+          "rg -n \"git push\" docs",
+          "printf '| git push origin main | RUN-1 |\\n' >> .agent/progress.md"
         ]
       }
     },
@@ -1196,6 +1238,145 @@
           "ls -la | grep README"
         ]
       }
+    },
+    {
+      "id": "RUN-1",
+      "title": "An unattended run never waits on a person",
+      "statement": "When whoever launches a run sets AGENTIC_SDLC_UNATTENDED, the guard MUST NOT ask, because an ask there stops the run at a prompt nobody answers. A commit on a branch that is not protected MUST pass so the run can checkpoint; a push MUST pass only to a branch that matches unattended.push_branches and is not protected, with no force, tags or deletion; every other call that would ask MUST be refused with a reason that tells the agent not to retry, to carry on and to report the call.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active",
+      "decision": "deny",
+      "opt_in": true,
+      "fix": "Carry on with the next step, and list the refused call under held calls in the run report so a person can run it.",
+      "examples_unattended": {
+        "allow": [
+          "git commit -m \"Add the parser\"",
+          "git commit -m \"$(cat msg.txt)\"",
+          "git push origin agent/work",
+          "git add src/parser.py && git commit -m \"Add the parser\"",
+          "git push",
+          "git push -u origin HEAD"
+        ],
+        "deny": [
+          "git push origin main",
+          "git push origin feature/other",
+          "git push --force origin agent/work",
+          "git push --tags",
+          "gh pr create --title \"Add the parser\" --body \"Adds it.\"",
+          "cat .env"
+        ]
+      },
+      "notes": "Opt-in through the environment of the Claude Code process; .agentic-sdlc.json cannot set it. The examples run with AGENTIC_SDLC_UNATTENDED=1 on branch agent/work with unattended.push_branches set to [\"agent/*\"]."
+    },
+    {
+      "id": "RUN-2",
+      "title": "A run nobody watches starts with a finish line, a cap and its own branch",
+      "statement": "A run that nobody watches MUST start with a finish condition that a check can show, a spend cap, and a working branch or worktree of its own, with AGENTIC_SDLC_UNATTENDED set by whoever launches it. It SHOULD run through the platform's own loop (/goal in auto mode, a background session, claude -p, or a scheduled task) rather than a loop of its own.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "RUN-3",
+      "title": "A run ends with a report in a file",
+      "statement": "An unattended run MUST end by writing a run report to a file: the commits it made with their shas, what it checked and with which command, every call the guard held, what failed or was skipped, and what is left. A held call MUST NOT be retried or worked around during the run.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "RUN-4",
+      "title": "An agent may start an unattended run, and the start is recorded",
+      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, is neither asked about nor refused, and the guard MUST record the start under RUN-4 in the decision record, whatever record.decisions says. In the run it starts, RUN-1 holds.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active",
+      "fix": "Nothing to fix: the start is recorded, and the run it starts follows RUN-1.",
+      "examples": {
+        "allow": [
+          "AGENTIC_SDLC_UNATTENDED=1 claude -p \"fix the parser\"",
+          "env AGENTIC_SDLC_UNATTENDED=1 claude -p x",
+          "export AGENTIC_SDLC_UNATTENDED=1",
+          "rg -n AGENTIC_SDLC_UNATTENDED src",
+          "unset AGENTIC_SDLC_UNATTENDED"
+        ]
+      },
+      "examples_unattended": {
+        "allow": [
+          "AGENTIC_SDLC_UNATTENDED=1 claude -p x"
+        ]
+      },
+      "decision": "record"
+    },
+    {
+      "id": "HANDOFF-1",
+      "title": "State that spans sessions lives in files",
+      "statement": "Work that spans more than one session or context window MUST keep its state in files in the working tree: a progress file (what was done, what is next, decisions and go-aheads given, held calls) and a feature list in JSON whose entries later sessions change only in their status and evidence fields.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-2",
+      "title": "A session starts by reading and ends by committing",
+      "statement": "Each session of such work MUST start by reading the progress file and the recent git log and running the project's basic check, fixing a broken tree before new work, and MUST end with a checkpoint commit and a progress entry that leave the tree in a state that could merge.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-3",
+      "title": "One feature at a time, passing only on evidence",
+      "statement": "A session SHOULD take one feature at a time. A feature MUST be marked passing only after an end-to-end check whose command and result are recorded; where the work sits near the limit of what the model does reliably, someone other than the session that built it (a fresh agent or a person) SHOULD judge it.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-4",
+      "title": "What is settled is written down when it is settled",
+      "statement": "A go-ahead, a boundary, a decision or a held call MUST be written to the progress file when it is settled, because a conversation does not survive compaction. After a compaction or in a new session the agent MUST re-read the progress file and the sources a claim rests on, and MUST NOT treat the summary as evidence.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-5",
+      "title": "Knowledge that outlives the task goes to the repository",
+      "statement": "Knowledge that outlives the task MUST go where the next reader finds it: a convention to the repository's agent instructions, a decision to a decision record, a finding to a dated research document. A session's own memory SHOULD hold only preferences and pointers to those files.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
     },
     {
       "id": "GUARD-1",
@@ -1241,6 +1422,35 @@
       "since": "1.0.0",
       "status": "active",
       "fix": "Say what the edit changes in the guard and why; write it when the user says yes."
+    },
+    {
+      "id": "AGENT-1",
+      "title": "The agent decides; the guard records what it would have asked",
+      "statement": "In agent mode, the default, a call that a rule other than GUARD-2 or SECRET-3 would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A GUARD-2 or SECRET-3 ask MUST still go to a person, and MUST be refused under RUN-1 when the launcher set AGENTIC_SDLC_UNATTENDED, because an edit of the guard's configuration can switch the refusals off. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
+      "mechanisms": [
+        "hook"
+      ],
+      "decision": "record",
+      "owner": "setup-conventions",
+      "since": "2.0.0",
+      "status": "active",
+      "fix": "Nothing to fix: the call runs and the decision record shows which rule would have asked. Set confirm mode where a person must answer.",
+      "notes": "The rule examples elsewhere in this registry state what each rule decides in confirm mode; agent mode then turns each ask into a recorded allow.",
+      "examples_agent": {
+        "allow": [
+          "git commit -m \"Add the parser\"",
+          "git push origin main",
+          "gh pr create --title \"Add it\" --body \"Adds it.\""
+        ],
+        "ask": [
+          "cat .env"
+        ],
+        "deny": [
+          "git add -A",
+          "git commit --no-verify -m \"x\"",
+          "git push --force origin main"
+        ]
+      }
     },
     {
       "id": "SECRET-3",

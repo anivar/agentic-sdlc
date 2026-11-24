@@ -55,7 +55,15 @@ SKIP_DIRS = {
 FORBIDDEN_FILE = ".agentic-sdlc-forbidden.txt"
 RULE_ID_RE = re.compile(r"\b([A-Z]{2,}-[0-9]+)\b")
 FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.S)
-SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+SKILL_NAME_RE = re.compile(r"^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+# The frontmatter keys of the Agent Skills specification, and the Claude Code plugin keys
+# the skills here also use. Any other key is refused.
+SPEC_KEYS = frozenset(
+    {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+)
+PLUGIN_KEYS = frozenset({"argument-hint", "disable-model-invocation"})
+SKILL_MD_MAX_LINES = 500
+REFERENCE_CONTENTS_AFTER = 100
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -425,7 +433,8 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
                 problems.append(f"{folder.name}: frontmatter name {name!r} differs from the folder")
             if not SKILL_NAME_RE.match(name):
                 problems.append(
-                    f"{folder.name}: name must be lowercase letters, digits and hyphens, at most 64 characters"
+                    f"{folder.name}: name must be lowercase letters, digits and single hyphens, "
+                    "with no hyphen at either end, at most 64 characters"
                 )
             description = fields.get("description", "")
             if not 1 <= len(description) <= 1024:
@@ -434,6 +443,44 @@ def cmd_check_skills(args: argparse.Namespace) -> int:
                 )
             if fields.get("license", "") == "":
                 problems.append(f"{folder.name}: license missing")
+            for key in sorted(set(fields) - SPEC_KEYS - PLUGIN_KEYS):
+                if not key.startswith("#"):
+                    problems.append(
+                        f"{folder.name}: frontmatter key {key!r} is not in the Agent Skills specification"
+                    )
+            if "compatibility" in fields and not 1 <= len(fields["compatibility"]) <= 500:
+                problems.append(
+                    f"{folder.name}: compatibility must be 1 to 500 characters "
+                    f"(got {len(fields['compatibility'])})"
+                )
+            frontmatter = FRONTMATTER_RE.match(body).group(1)  # parsed above, so it matches
+            problems += [
+                f"{folder.name}: {problem}" for problem in text.metadata_problems(frontmatter)
+            ]
+            line_count = len(body.splitlines())
+            if line_count >= SKILL_MD_MAX_LINES:
+                problems.append(
+                    f"{folder.name}: SKILL.md has {line_count} lines; keep it under "
+                    f"{SKILL_MD_MAX_LINES} and move detail into references/"
+                )
+            for reference in sorted(folder.glob("references/*.md")):
+                reference_text = reference.read_text(encoding="utf-8", errors="replace")
+                reference_lines = len(reference_text.splitlines())
+                if reference_lines > REFERENCE_CONTENTS_AFTER and not text.has_contents_list(
+                    reference_text
+                ):
+                    problems.append(
+                        f"{folder.name}: references/{reference.name} has {reference_lines} lines "
+                        "and no contents list"
+                    )
+            for document in sorted(folder.rglob("*.md")):
+                document_text = document.read_text(encoding="utf-8", errors="replace")
+                for line, opened_at in text.nested_fence_findings(document_text):
+                    problems.append(
+                        f"{folder.name}: {document.relative_to(folder).as_posix()}:{line}: a fence with "
+                        f"a language sits inside the block opened at line {opened_at}; give the outer "
+                        "block a longer fence"
+                    )
             prose = FRONTMATTER_RE.sub("", body, count=1)
             for reference in sorted(folder.glob("references/*.md")):
                 prose += "\n" + reference.read_text(encoding="utf-8", errors="replace")

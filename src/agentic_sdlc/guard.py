@@ -7,6 +7,7 @@ line when it has one.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import shutil
@@ -35,6 +36,16 @@ RULE_IDS = (
     "TRACE-2",
     "GUARD-1",
     "GUARD-2",
+    "RUN-1",
+)
+
+# The reason an unattended run gets in place of a prompt nobody would answer (RUN-1). It is read
+# by the agent, so it says what to do next.
+UNATTENDED_HELD = (
+    "this run is unattended (whoever launched it set AGENTIC_SDLC_UNATTENDED), so nobody can give "
+    "the go-ahead now and the call is refused. Nothing keeps it for later: do not retry it or work "
+    "around it, carry on with the next step, and list it under held calls in the run report so a "
+    "person can run it"
 )
 
 TRUFFLEHOG_FOUND = 183  # TruffleHog's exit code for results with --fail
@@ -81,6 +92,13 @@ UNTRACED_READ_ONLY = {
 }
 
 
+# Programs that print or search their arguments and never run them. A gated command named in
+# their arguments is text, not a call, so TRACE-1 does not ask about it: a search for "git push",
+# or a held call written into a run report. Narrower than UNTRACED_READ_ONLY, which holds env and
+# find, both of which can run another program.
+QUOTING_ONLY = {"echo", "printf", "cat", "head", "tail", "grep", "rg", "wc", "ls"}
+
+
 @dataclass
 class Decision:
     permission: str = "allow"
@@ -113,6 +131,173 @@ def _only_read_only(parsed: command_mod.Parsed) -> bool:
     """Every simple command is one of the read-only programs in ``UNTRACED_READ_ONLY``."""
     return bool(parsed.commands) and all(
         facts.program in UNTRACED_READ_ONLY for facts in parsed.commands
+    )
+
+
+@dataclass
+class ShellText:
+    """What the shell would run inside a command line, beyond its simple commands."""
+
+    bodies: list[str] = field(default_factory=list)  # command and process substitutions
+    heredocs: int = 0
+    unreadable: bool = False  # an unclosed quote, substitution or here-string the scan cannot place
+
+
+def _close_paren(text: str, open_at: int) -> int:
+    """Index of the ``)`` that closes the ``(`` at ``open_at``, or -1."""
+    depth, index = 0, open_at
+    while index < len(text):
+        ch = text[index]
+        if ch == "\\":
+            index += 2
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return -1
+
+
+def _heredoc_substitutions(body: str, out: ShellText) -> None:
+    """An unquoted heredoc body expands ``$( )`` and backticks; quotes in it are plain text."""
+    index = 0
+    while index < len(body):
+        ch = body[index]
+        if ch == "\\":
+            index += 2
+            continue
+        if body.startswith("$(", index):
+            close = _close_paren(body, index + 1)
+            if close == -1:
+                out.bodies.append(body[index + 2 :])
+                out.unreadable = True
+                return
+            out.bodies.append(body[index + 2 : close])
+            index = close + 1
+            continue
+        if ch == "`":
+            close = body.find("`", index + 1)
+            if close == -1:
+                out.bodies.append(body[index + 1 :])
+                out.unreadable = True
+                return
+            out.bodies.append(body[index + 1 : close])
+            index = close + 1
+            continue
+        index += 1
+
+
+def scan_shell(raw: str) -> ShellText:
+    """Find what the shell would run inside ``raw``: the body of every command substitution
+    (``$( )``, backticks) and process substitution (``<( )``, ``>( )``), including those in
+    unquoted heredocs. Single-quoted text, quoted heredocs and ``#`` comments are skipped, as
+    the shell skips them. Anything the scan cannot place marks the text unreadable."""
+    out = ShellText()
+    text, length = raw, len(raw)
+    pending: list[tuple[str, bool, bool]] = []  # tag, quoted, strips tabs
+    quote: str | None = None
+    index = 0
+    while index < length:
+        ch = text[index]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            index += 1
+            continue
+        if ch == "\\":
+            index += 2
+            continue
+        if quote is None and ch == "#" and (index == 0 or text[index - 1] in " \t\n;&|()"):
+            newline = text.find("\n", index)
+            index = length if newline == -1 else newline
+            continue
+        if ch == '"':
+            quote = None if quote == '"' else '"'
+            index += 1
+            continue
+        if quote is None and ch == "'":
+            quote = "'"
+            index += 1
+            continue
+        if quote is None and text.startswith("<<<", index):
+            index += 3
+            continue
+        if quote is None and text.startswith("<<", index):
+            match = command_mod.HEREDOC_RE.match(text, index)
+            if match:
+                pending.append(
+                    (match.group("tag"), bool(match.group("q")), "<<-" in match.group(0))
+                )
+                index = match.end()
+                continue
+        if text.startswith("$(", index) or (quote is None and text.startswith(("<(", ">("), index)):
+            close = _close_paren(text, index + 1)
+            if close == -1:
+                out.bodies.append(text[index + 2 :])
+                out.unreadable = True
+                return out
+            out.bodies.append(text[index + 2 : close])
+            index = close + 1
+            continue
+        if ch == "`":
+            close = text.find("`", index + 1)
+            if close == -1:
+                out.bodies.append(text[index + 1 :])
+                out.unreadable = True
+                return out
+            out.bodies.append(text[index + 1 : close])
+            index = close + 1
+            continue
+        if ch == "\n" and quote is None and pending:
+            index += 1
+            for tag, quoted, strips_tabs in pending:
+                out.heredocs += 1
+                lines: list[str] = []
+                while index < length:
+                    newline = text.find("\n", index)
+                    stop = length if newline == -1 else newline
+                    line = text[index:stop]
+                    index = length if newline == -1 else newline + 1
+                    if (line.lstrip("\t") if strips_tabs else line) == tag:
+                        break
+                    lines.append(line)
+                if not quoted:
+                    _heredoc_substitutions("\n".join(lines), out)
+            pending = []
+            continue
+        index += 1
+    out.heredocs += len(pending)
+    if quote is not None:
+        out.unreadable = True
+    return out
+
+
+def _runs_gated(body: str) -> bool:
+    """A substitution body that names a gated command and is not a traced read."""
+    if not looks_gated(body):
+        return False
+    try:
+        parsed = command_mod.parse(body)
+    except Exception:  # noqa: BLE001 - a body the parser cannot read is confirmed, not trusted
+        return True
+    return parsed.gated or not parsed.traced
+
+
+def _only_quoting(parsed: command_mod.Parsed, scan: ShellText) -> bool:
+    """Every simple command only prints or searches its arguments, and the scan placed every
+    quote and heredoc the way the parser did. ``rg --pre`` runs a program, so it does not count."""
+    if scan.unreadable or scan.heredocs != len(parsed.heredocs):
+        return False
+    return bool(parsed.commands) and all(
+        facts.program in QUOTING_ONLY
+        and not (
+            facts.program == "rg"
+            and any(t == "--pre" or t.startswith("--pre=") for t in facts.tokens)
+        )
+        for facts in parsed.commands
     )
 
 
@@ -153,6 +338,13 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             add(
                 "deny", "GUARD-1", "a -c override of hooks, includes or aliases on the command line"
             )
+        if config_mod.UNATTENDED_ENV in facts.sets_variables:
+            # The agent's own decision: recorded, never asked about or refused.
+            add(
+                "allow",
+                "RUN-4",
+                f"the command sets {config_mod.UNATTENDED_ENV} and starts an unattended run",
+            )
         if facts.kind == "read" and facts.reads_secret_file:
             names = ", ".join(facts.reads_secret_file[:3])
             add("ask", "SECRET-3", f"{names} holds credentials by name")
@@ -191,7 +383,19 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             for finding in staged_secret_findings(where, cfg):
                 add("deny", "SECRET-1", f"{finding.name} at staged line {finding.line}")
 
-    if looks_gated(command) and not parsed.gated and not parsed.traced:
+    scan = scan_shell(command)
+    if any(_runs_gated(body) for body in scan.bodies):
+        add(
+            "ask",
+            "TRACE-1",
+            "the command runs a commit, push or forge write inside a substitution the parser does not trace; confirm it yourself",
+        )
+    elif (
+        looks_gated(command)
+        and not parsed.gated
+        and not parsed.traced
+        and not _only_quoting(parsed, scan)
+    ):
         add(
             "ask",
             "TRACE-1",
@@ -206,7 +410,8 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
         )
 
     for facts in parsed.commands:
-        if facts.carries_text and facts.text_by_substitution:
+        checkpoint = cfg.unattended and facts.is_commit
+        if facts.carries_text and facts.text_by_substitution and not checkpoint:
             rule = "ASK-1" if facts.is_commit else "ASK-3"
             if not quiet_note(rule):
                 decision.add(
@@ -214,7 +419,7 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                     rule,
                     "message text built by a shell substitution is not scanned here; the check after the commit and the pull request check cover it",
                 )
-        if facts.carries_text and facts.text_file_missing:
+        if facts.carries_text and facts.text_file_missing and not checkpoint:
             rule = "ASK-1" if facts.is_commit else "ASK-3"
             if not quiet_note(rule):
                 decision.add(
@@ -222,14 +427,29 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                     rule,
                     "a message file the command names does not exist yet, so only the command text was scanned; the check after the commit covers the rest",
                 )
-        if facts.is_commit and not facts.dry_run and cfg.confirm_commit:
+        if facts.is_commit and not facts.dry_run and cfg.unattended:
+            # An unattended run checkpoints with commits, but only on a working branch.
+            branch = command_mod.current_branch(facts.workdir or cwd)
+            if branch is None or branch in cfg.protected_branches:
+                add(
+                    "deny",
+                    "RUN-1",
+                    f"a commit in an unattended run would land on {branch or 'a detached HEAD'}; "
+                    "commit on a working branch",
+                )
+        elif facts.is_commit and not facts.dry_run and cfg.confirm_commit:
             # slice scope: only the commit that would start the unpushed slice asks; the push
             # and the post are the slice boundary and ask unchanged.
             continuing = cfg.confirm_scope == "slice" and not first_unpushed(facts.workdir or cwd)
             if not continuing:
                 what = "amend" if facts.amend else "commit"
                 add("ask", "ASK-1", f"{what} needs your go-ahead")
-        if facts.is_push and not facts.dry_run and cfg.confirm_push:
+        if (
+            facts.is_push
+            and not facts.dry_run
+            and cfg.confirm_push
+            and not (cfg.unattended and agent_branch_push(facts, cfg))
+        ):
             where = (
                 ", ".join(facts.targets)
                 if facts.targets
@@ -245,9 +465,61 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                 f"{facts.post_reason} is not a subcommand the hook recognizes; review it yourself",
             )
 
+    apply_mode(decision, cfg, titles, fixes)
     if cfg.problems:
         decision.reasons.append("config: " + "; ".join(cfg.problems))
     return decision
+
+
+def agent_branch_push(facts: command_mod.Facts, cfg: config_mod.Config) -> bool:
+    """True when an unattended run may push this without a go-ahead (RUN-1): every target is a
+    named branch that matches unattended.push_branches and is not protected, with no force, no
+    tags, no deletion and no mirror."""
+    if not cfg.unattended_push or not facts.targets:
+        return False
+    if facts.force or facts.tags_pushed or facts.deletes or facts.mirror:
+        return False
+    protected = set(cfg.protected_branches)
+    for target in facts.targets:
+        if target in protected or target in ("*", "HEAD"):
+            return False
+        if not any(fnmatch.fnmatchcase(target, pattern) for pattern in cfg.unattended_push):
+            return False
+    return True
+
+
+# Asks a person answers in agent mode too. An edit to the guard's own configuration can switch
+# every refusal off (empty the protected branches, drop the secret scan or the hook), and a read
+# of a secret-named file puts the secret into the transcript.
+KEPT_ASKS = frozenset({"GUARD-2", "SECRET-3"})
+
+
+def apply_mode(
+    decision: Decision, cfg: config_mod.Config, titles: dict[str, str], fixes: dict[str, str]
+) -> None:
+    """Settle who answers an ask. In agent mode, the default, the agent decides: the call is
+    allowed and AGENT-1 is recorded beside the rule that asked, except for KEPT_ASKS, which a
+    person answers. In confirm mode a person answers every ask. In an unattended run nobody can,
+    so an ask a person would answer is refused (RUN-1). A refusal stays a refusal."""
+    if decision.permission != "ask":
+        return
+    if cfg.agent_decides and not KEPT_ASKS.isdisjoint(decision.rules):
+        if config_mod.unattended_from_env():
+            hold_for_unattended(decision, titles, fixes)
+    elif cfg.agent_decides:
+        decision.permission = "allow"
+        title = titles.get("AGENT-1", "AGENT-1")
+        decision.add("allow", "AGENT-1", f"{title}: recorded, not asked")
+    elif cfg.unattended:
+        hold_for_unattended(decision, titles, fixes)
+
+
+def hold_for_unattended(decision: Decision, titles: dict[str, str], fixes: dict[str, str]) -> None:
+    """Nobody can answer an ask in an unattended run, and an ask there would stop the run at a
+    prompt. Turn it into a refusal the agent can act on (RUN-1)."""
+    if decision.permission == "ask":
+        title = titles.get("RUN-1", "RUN-1")
+        decision.add("deny", "RUN-1", f"{title}: {UNATTENDED_HELD}", fixes.get("RUN-1", ""))
 
 
 def decide_file(
@@ -277,6 +549,7 @@ def decide_file(
             f"{titles.get('GUARD-2', 'GUARD-2')}: {path} changes what the guard does",
             fixes.get("GUARD-2", ""),
         )
+    apply_mode(decision, cfg, titles, fixes)
     return decision
 
 

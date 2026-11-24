@@ -18,6 +18,7 @@ concept; the words to avoid are listed so the documents do not drift.
 | Operator of record | The person who signs a change and answers for it. | author (when the agent typed it) | Verified in README "Why no tool attribution" |
 | Origination | Whether a human or an agent operated a change. Recorded, when a repository wants it, by a role trailer; never by a product name. | AI-generated flag | Verified in README "Why no tool attribution" |
 | Evidence tag | Verified, Measured, Inferred or Planned on a factual clause. A level is never upgraded. | confidence level | Verified in `skills/evidence/SKILL.md` |
+| Fresh reader | A subagent that reviews a draft with the document and the repository and nothing from the conversation that wrote it (REVIEW-11). Its read is a review; the author's read in the same context is a self-review. | Goldfish, second pair of eyes | Verified in `skills/review-change/SKILL.md` |
 | Slice | One complete, reviewable change that leaves the system working: one pull request per plan step. | increment, chunk | Verified in `skills/thin-slices/SKILL.md` |
 | Seam | Michael Feathers' term: where a module's interface lives and behaviour can be altered without editing in that place. | boundary | Verified in `skills/deep-modules/SKILL.md` |
 | Coverage table | `docs/coverage.md`, generated from the registry: every rule, its mechanisms and the skills that cite it. | matrix | Verified in `src/agentic_sdlc/cli.py` |

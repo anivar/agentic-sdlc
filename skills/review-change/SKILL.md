@@ -5,9 +5,11 @@ description: >
   that introduced the code, verified at its head sha, one finding per thread in Conventional
   Comments with the defect, file:line, consequence, rule and required behaviour, a two to four
   line summary that ends in a decision, a mutation check before trusting a test, dependency
-  bumps one at a time, and an adversarial read of your own work before anyone else sees it.
+  bumps one at a time, an adversarial read of your own work before anyone else sees it, a
+  fresh-context reader for a plan or design you drafted, and one answer for every finding.
   Triggers on: "review", "code review", "review this PR", "review this MR", "review the diff",
-  "LGTM?", "is this safe to merge", "self-review", a diff pasted inline, "before I push".
+  "LGTM?", "is this safe to merge", "self-review", a diff pasted inline, "before I push",
+  "review this plan", "review the design", "fresh eyes".
 license: MIT
 compatibility: Any repository on GitHub or GitLab; the mutation check needs a runnable test suite.
 metadata:
@@ -15,8 +17,8 @@ metadata:
   author_url: https://anivar.net
   version: 1.0.0
   tags: code-review, conventional-comments, mutation-testing, pull-request, merge-request
-  derived_from: code-review-and-quality (addyosmani/agent-skills, MIT) for the review walk, the dependency section and the mutation probe (invert one condition, run the suite, restore); the finding format, the mutant count and dead-mutant reading, and the self-review are the author's own
-  rules: REVIEW-1 REVIEW-2 REVIEW-3 REVIEW-4 REVIEW-5 REVIEW-6 REVIEW-7 REVIEW-8 REVIEW-9 REVIEW-10 EVID-3 EVID-8 EVID-9 VOICE-11 SLICE-1 SECRET-1 SECRET-2
+  derived_from: code-review-and-quality (addyosmani/agent-skills, MIT) for the review walk, the dependency section and the mutation probe (invert one condition, run the suite, restore); the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0) for the fresh-context reader, the paraphrase before findings and the answer kinds, restated without its text; the finding format, the mutant count and dead-mutant reading, and the self-review are the author's own
+  rules: REVIEW-1 REVIEW-2 REVIEW-3 REVIEW-4 REVIEW-5 REVIEW-6 REVIEW-7 REVIEW-8 REVIEW-9 REVIEW-10 REVIEW-11 REVIEW-12 EVID-3 EVID-8 EVID-9 VOICE-9 VOICE-11 PLAN-7 SLICE-1 SECRET-1 SECRET-2
 ---
 
 # Review a change
@@ -32,12 +34,14 @@ and a decision. Everything else is noise.
 | REVIEW-2 | One finding per thread, in Conventional Comments | Label, defect, `file:line`, consequence, rule broken, required behaviour, at most one suggestion. No hedges. Format in `references/finding-format.md`. |
 | REVIEW-3 | The summary carries the decision | Two to four lines. The last one is the decision: approve, request changes, or needs a decider, with the open point and who decides. |
 | REVIEW-4 | Mutate before trusting a test | Judge a test against the code it exercises, not its name. Invert one condition the change adds, run the suite, restore the file. A mutant that survives is a finding naming the missing case. A mutant that changed nothing proves nothing. Report mutants and catches as a count. Procedure in `references/mutation-check.md`. |
-| REVIEW-5 | Review rounds fix only real defects | Cosmetic bot suggestions get a one-line verdict and no push. On your own change, answer every bot thread (fixed, or refuted with evidence) and resolve it. On someone else's change, reply and leave resolution to the author. |
+| REVIEW-5 | Review rounds fix only real defects | Cosmetic bot suggestions get a one-line verdict and no push. On your own change, answer every bot thread (fixed, or refuted with evidence, as REVIEW-12 defines) and resolve it. On someone else's change, reply and leave resolution to the author. |
 | REVIEW-6 | Confirm the diff is absent before merging | Before reporting on, merging or closing a change, confirm its diff is not already on the target. Check a stacked change against its parent's tip. Re-diff a conflict resolution against the target's current file. |
 | REVIEW-7 | Adversarial self-review before showing | Which claim rests on something not opened this session. Which number was recalled rather than computed. Which action does damage if the premise is wrong. Fix what it finds before any push, merge or live change. |
 | REVIEW-8 | Sort proposals by what ships | Internals-only, or changes the released artifact (versioning, signing, distribution). The second needs a strong reason, stated. |
 | REVIEW-9 | One dependency per change | Changelog read, package isolated, suite before and after, lockfile diff reviewed, never hand-edited. |
 | REVIEW-10 | Test and infrastructure work leaves shipped code alone | No change to shipped code without an explicit ask. Negative-test probes run in a worktree or a temporary repository. |
+| REVIEW-11 | A fresh reader reviews a draft | Before a plan or design you drafted goes to the decider for approval, one subagent reads it with the document, the ask and the repository, and nothing else from your conversation. It paraphrases before it finds. More readers need the decider's yes. With no subagent, or after two failures, say "self-review only". Procedure below and in `references/fresh-reader.md`. |
+| REVIEW-12 | Every finding gets one answer | Fixed, accepted with the change proposed, refuted with evidence the reviewer could have read, given to the decider, or (a nitpick, a cosmetic bot suggestion) declined in one line. Never refute a comprehension gap, never change a label or decoration. The decider sees every answer; a refutation stands only when the decider does not overrule it. A fixed finding raised again re-opens. A reviewer that returned nothing did not run. Format in `references/finding-format.md`. |
 
 ## The walk
 
@@ -82,6 +86,35 @@ Run REVIEW-7 on every plan, finding, draft and change before it is shown, unaske
 own earlier output and any agent's output as a lead (EVID-3): open every cited line again. Re-read
 a file before asserting its state (EVID-8).
 
+The self-review runs in the context that wrote the draft, so it shares the draft's blind spots: it
+knows what the author meant and reads that into the text. A plan or a design gets a second read,
+from a reader who knows only the text, before it goes to the decider for approval (REVIEW-11).
+Other documents may get one when the decider asks.
+
+## A draft under fresh eyes
+
+1. Finish the self-review (REVIEW-7) first, so the reader spends its read on what you could not
+   see.
+2. Spawn one subagent with the brief in `references/fresh-reader.md`, a read-only type where the
+   harness has one. Fill in the document's path and the sha, or paste the document's text
+   verbatim when it exists only in the conversation, and paste the decider's ask verbatim when
+   there is one. Give it read access to the repository and to the sources the document cites.
+   Give it nothing else: no summary of the session, no conclusion you hope it reaches, no list of
+   issues you already know. A reader told what to look for finds that and stops.
+3. Compare the reader's paraphrase with what you meant. Each place where they differ is a finding
+   against the document, not against the reader.
+4. Open every line the reader cites before you act on it (EVID-3).
+5. Answer each finding (REVIEW-12) in the form in `references/finding-format.md`.
+6. Show the decider the paraphrase, the decisions the reader found unrecorded, the claims it could
+   not check, the findings and the answers. Unrecorded decisions and findings given to the decider
+   come first: they need the decider's knowledge, not only a yes. In a plan, each unrecorded
+   decision becomes an open row in the Decisions table with options, who decides and by when
+   (PLAN-7), or a question in the next grill-plan round.
+
+If the reader fails, times out or returns nothing, retry once. After a second failure, report the
+reader as not run and the review as a self-review only. A second round runs when the decider asks
+for one, with a new reader; settled findings carry over and are not re-opened.
+
 ## Companion skills
 
 | Need | Skill |
@@ -90,8 +123,12 @@ a file before asserting its state (EVID-8).
 | The voice of threads and summaries | plain-voice |
 | Tests that are worth the mutation check | test-first |
 | Keeping the change small enough to review | thin-slices |
+| Comparing a plan with the ask before the fresh read | plan-project |
 
 ## Sources
 
 The approval standard and the disagreement hierarchy follow Google's engineering practices
 (CC BY 4.0). The mutation probe follows code-review-and-quality (addyosmani/agent-skills, MIT).
+The fresh-context reader, the paraphrase before findings and the answer kinds follow the
+Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0), restated in this skill's
+own words.

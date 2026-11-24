@@ -109,15 +109,34 @@ def test_lint_voice_levels(tmp_path: Path, capsys):
     assert run("lint-voice", str(clean)) == 0
 
 
-def make_repo_tree(tmp_path: Path, skill_body: str) -> Path:
+def make_repo_tree(
+    tmp_path: Path, skill_body: str, folder: str = "thin-slices", references: dict | None = None
+) -> Path:
     root = tmp_path / "tree"
     (root / "rules").mkdir(parents=True)
     (root / "schemas").mkdir()
     shutil.copy(ROOT / "rules" / "registry.json", root / "rules" / "registry.json")
-    skill = root / "skills" / "thin-slices"
+    skill = root / "skills" / folder
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text(skill_body, encoding="utf-8")
+    for name, body in (references or {}).items():
+        (skill / "references").mkdir(exist_ok=True)
+        (skill / "references" / name).write_text(body, encoding="utf-8")
     return root
+
+
+def skill_text(
+    frontmatter_extra: str = "", body: str = "STAGE-1 applies.\n", name: str = "thin-slices"
+) -> str:
+    return (
+        f"---\nname: {name}\ndescription: ok\nlicense: MIT\n{frontmatter_extra}"
+        f"metadata:\n  rules: STAGE-1\n---\n\n{body}"
+    )
+
+
+def check_skills_output(root: Path, capsys) -> str:
+    run("check-skills", "--root", str(root))
+    return capsys.readouterr().out
 
 
 def test_check_skills_validates_frontmatter_and_citations(tmp_path: Path, capsys):
@@ -168,6 +187,110 @@ def test_check_skills_requires_listed_ids_to_be_cited(tmp_path: Path, capsys):
     code = run("check-skills", "--root", str(root))
     out = capsys.readouterr().out
     assert code == 1 and "lists ASK-2 in metadata.rules but never cites" in out
+
+
+def test_check_skills_name_has_single_hyphens_and_none_at_either_end(tmp_path: Path, capsys):
+    for i, bad in enumerate(("thin--slices", "thin-slices-")):
+        root = make_repo_tree(tmp_path / str(i), skill_text(name=bad), folder=bad)
+        assert "name must be lowercase letters, digits and single hyphens" in check_skills_output(
+            root, capsys
+        )
+    root = make_repo_tree(tmp_path / "ok", skill_text())
+    assert "single hyphens" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_refuses_frontmatter_keys_outside_the_specification(tmp_path: Path, capsys):
+    root = make_repo_tree(tmp_path, skill_text("version: 1.0.0\n"))
+    assert (
+        "frontmatter key 'version' is not in the Agent Skills specification"
+        in check_skills_output(root, capsys)
+    )
+    plugin_keys = 'argument-hint: "[path]"\ndisable-model-invocation: true\nallowed-tools: Bash(git:*) Read\ncompatibility: Any git repository\n'
+    root = make_repo_tree(tmp_path / "ok", skill_text(plugin_keys))
+    assert "not in the Agent Skills specification" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_caps_compatibility_at_500_characters(tmp_path: Path, capsys):
+    root = make_repo_tree(tmp_path, skill_text("compatibility: " + "x" * 501 + "\n"))
+    assert "compatibility must be 1 to 500 characters (got 501)" in check_skills_output(
+        root, capsys
+    )
+    root = make_repo_tree(tmp_path / "ok", skill_text("compatibility: " + "x" * 500 + "\n"))
+    assert "compatibility must be" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_metadata_maps_strings_to_strings(tmp_path: Path, capsys):
+    body = (
+        "---\nname: thin-slices\ndescription: ok\nlicense: MIT\nmetadata:\n  rules: STAGE-1\n"
+        "  version: 1.0\n  released: 2026-11-22\n  stable: true\n  tags:\n    - a\n"
+        "  flow: [a, b]\n  empty:\n"
+        '  quoted: "1.0"\n  semver: 1.2.6\n---\n\nSTAGE-1 applies.\n'
+    )
+    out = check_skills_output(make_repo_tree(tmp_path, body), capsys)
+    for key in ("version", "released", "stable", "empty"):
+        assert f"metadata.{key} is not a string" in out
+    for key in ("tags", "flow"):
+        assert f"metadata.{key} holds a nested value" in out
+    assert (
+        "metadata.quoted" not in out
+        and "metadata.semver" not in out
+        and "metadata.rules" not in out
+    )
+
+
+def test_check_skills_keeps_skill_md_under_500_lines(tmp_path: Path, capsys):
+    root = make_repo_tree(tmp_path, skill_text(body="STAGE-1 applies.\n" + "line\n" * 491))
+    assert "SKILL.md has 500 lines" in check_skills_output(root, capsys)
+    root = make_repo_tree(tmp_path / "ok", skill_text(body="STAGE-1 applies.\n" + "line\n" * 490))
+    assert "SKILL.md has" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_long_reference_opens_with_a_contents_list(tmp_path: Path, capsys):
+    long_body = "# Guide\n\n" + "".join(f"## Part {i}\n\ntext\n\n" for i in range(30))
+    root = make_repo_tree(tmp_path, skill_text(), references={"guide.md": long_body})
+    assert "references/guide.md has 122 lines and no contents list" in check_skills_output(
+        root, capsys
+    )
+    listed = "# Guide\n\n## Contents\n\n- Part 0\n\n" + long_body[len("# Guide\n\n") :]
+    root = make_repo_tree(tmp_path / "ok", skill_text(), references={"guide.md": listed})
+    assert "no contents list" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_contents_list_starts_after_100_lines(tmp_path: Path, capsys):
+    root = make_repo_tree(tmp_path, skill_text(), references={"guide.md": "line\n" * 101})
+    assert "references/guide.md has 101 lines and no contents list" in check_skills_output(
+        root, capsys
+    )
+    root = make_repo_tree(tmp_path / "ok", skill_text(), references={"guide.md": "line\n" * 100})
+    assert "no contents list" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_contents_heading_inside_a_code_block_does_not_count(tmp_path: Path, capsys):
+    quoted = "```markdown\n## Contents\n```\n" + "line\n" * 101
+    root = make_repo_tree(tmp_path, skill_text(), references={"guide.md": quoted})
+    assert "references/guide.md has 104 lines and no contents list" in check_skills_output(
+        root, capsys
+    )
+
+
+def test_check_skills_refuses_a_same_length_fence_nested_in_a_block(tmp_path: Path, capsys):
+    nested = "STAGE-1 applies.\n\n```markdown\n# Title\n\n```bash\nnpm install\n```\n```\n"
+    root = make_repo_tree(tmp_path, skill_text(body=nested))
+    out = check_skills_output(root, capsys)
+    assert "SKILL.md:14: a fence with a language sits inside the block opened at line 11" in out
+    widened = "STAGE-1 applies.\n\n````markdown\n# Title\n\n```bash\nnpm install\n```\n````\n"
+    root = make_repo_tree(tmp_path / "ok", skill_text(body=widened))
+    assert "sits inside the block" not in check_skills_output(root, capsys)
+
+
+def test_check_skills_looks_for_nested_fences_in_every_markdown_file(tmp_path: Path, capsys):
+    nested = "# Guide\n\n```markdown\n```bash\nls\n```\n```\n"
+    root = make_repo_tree(tmp_path, skill_text(), references={"guide.md": nested})
+    out = check_skills_output(root, capsys)
+    assert (
+        "references/guide.md:4: a fence with a language sits inside the block opened at line 3"
+        in out
+    )
 
 
 def test_config_scanner_key_and_the_retired_gitleaks_alias():

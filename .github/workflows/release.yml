@@ -4,7 +4,7 @@
 # tag) does not run it again, so a release and its notes are written once.
 #
 # One-time maintainer setup, before the first tag that should publish: on PyPI create a
-# pending trusted publisher for the project agentic-sdlc naming this repository
+# pending trusted publisher for the project agentic-sdlc-guard naming this repository
 # (anivar/agentic-sdlc), this workflow (release.yml) and the environment pypi, and create the
 # pypi environment here. From then on a signed v* tag is the whole release.
 name: release
@@ -27,6 +27,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Refuse a tag that differs from the shipped versions
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          package="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)"
+          plugin="$(jq -r '.version // empty' .claude-plugin/plugin.json)"
+          if [ "$package" != "$version" ] || [ "$plugin" != "$version" ]; then
+            echo "::error::tag $version, pyproject.toml $package, .claude-plugin/plugin.json $plugin: all three must agree"
+            exit 1
+          fi
       - name: Take the CHANGELOG section for this tag
         id: notes
         run: |
@@ -57,7 +66,7 @@ jobs:
       id-token: write
     environment:
       name: pypi
-      url: https://pypi.org/p/agentic-sdlc
+      url: https://pypi.org/p/agentic-sdlc-guard
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
