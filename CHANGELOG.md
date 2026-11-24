@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1 (2026-11-24)
+
+### Fixed
+
+- The wheel carries the rule registry. A CLI installed from PyPI ran without
+  `rules/registry.json`, so a refusal had no "Fix:" line and AGENT-1 showed its bare id. The
+  package now holds a byte copy at `src/agentic_sdlc/registry.json`; `agentic-sdlc coverage`
+  writes it, and `coverage --check` fails when it differs from `rules/registry.json`, which
+  stays the specification. A checkout and the plugin still read `rules/registry.json`.
+
 ## 2.0.0 (2026-11-24)
 
 This release breaks existing behaviour: the guard's default is agent mode

@@ -317,6 +317,19 @@ def test_validate_and_coverage_roundtrip(tmp_path: Path, capsys):
     assert "| ATTR-1 |" in rendered and "| hook |" in rendered
 
 
+def test_coverage_check_refuses_a_stale_wheel_copy_of_the_registry(tmp_path: Path):
+    root = tmp_path / "cov"
+    (root / "rules").mkdir(parents=True)
+    (root / "src" / "agentic_sdlc").mkdir(parents=True)
+    shutil.copy(ROOT / "rules" / "registry.json", root / "rules" / "registry.json")
+    assert run("coverage", "--root", str(root)) == 0
+    packaged = root / "src" / "agentic_sdlc" / "registry.json"
+    assert packaged.read_bytes() == (root / "rules" / "registry.json").read_bytes()
+    assert run("coverage", "--root", str(root), "--check") == 0
+    packaged.write_bytes(packaged.read_bytes().replace(b'"STAGE-1"', b'"STAGE-9"', 1))
+    assert run("coverage", "--root", str(root), "--check") == 1
+
+
 def test_frontmatter_parser_handles_folded_description():
     body = "---\nname: x\ndescription: >\n  First line\n  second line.\nlicense: MIT\n---\n\n# X\n"
     fields = cli.parse_frontmatter(body)

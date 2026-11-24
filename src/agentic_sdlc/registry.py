@@ -14,6 +14,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 REGISTRY_PATH = ROOT / "rules" / "registry.json"
+# An installed wheel has no rules/ folder. It carries this copy, which `agentic-sdlc coverage`
+# writes from the specification and `coverage --check` keeps current.
+PACKAGED_PATH = Path(__file__).resolve().parent / "registry.json"
 
 ID_RE = re.compile(r"^[A-Z]+-[0-9]+$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
@@ -36,7 +39,7 @@ OPTIONAL = (
 
 def load(path: Path | None = None) -> dict[str, Any]:
     """Read the registry file. Raises ``FileNotFoundError`` or ``ValueError`` on a bad file."""
-    source = path or REGISTRY_PATH
+    source = path or (REGISTRY_PATH if REGISTRY_PATH.is_file() else PACKAGED_PATH)
     with open(source, encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):

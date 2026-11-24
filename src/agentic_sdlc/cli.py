@@ -6,7 +6,7 @@ agentic-sdlc check-pr --event $GITHUB_EVENT_PATH
 agentic-sdlc lint-voice README.md docs    the mechanical plain-voice rules
 agentic-sdlc check-skills                 skill frontmatter, rule citations, attribution, forbidden tokens
 agentic-sdlc validate                     the registry and the repository config
-agentic-sdlc coverage [--check]           docs/coverage.md from the registry
+agentic-sdlc coverage [--check]           docs/coverage.md and the wheel's registry copy
 agentic-sdlc hooks install|status|uninstall native git hooks for any agent
 agentic-sdlc log [--last N] [--summary]   the decisions the hook recorded here
 agentic-sdlc check-mr [--strict]          GitLab CI: title, description and commits of the MR
@@ -141,9 +141,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--root", default=".", help="repository root")
     p.set_defaults(func=cmd_validate)
 
-    p = sub.add_parser("coverage", help="write docs/coverage.md from the registry")
+    p = sub.add_parser(
+        "coverage", help="write docs/coverage.md and the wheel's registry copy from the registry"
+    )
     p.add_argument("--root", default=".", help="repository root")
-    p.add_argument("--check", action="store_true", help="fail when the file on disk is stale")
+    p.add_argument("--check", action="store_true", help="fail when a file on disk is stale")
     p.set_defaults(func=cmd_coverage)
 
     p = sub.add_parser(
@@ -644,20 +646,32 @@ def render_coverage(data: dict, citations: dict[str, list[str]] | None = None) -
 
 def cmd_coverage(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
-    rendered = render_coverage(
-        registry.load(root / "rules" / "registry.json"), skill_citations(root)
-    )
+    spec = root / "rules" / "registry.json"
+    rendered = render_coverage(registry.load(spec), skill_citations(root))
     target = root / "docs" / "coverage.md"
+    # An installed wheel has no rules/ folder, so the package carries a byte copy of the
+    # specification. Only this repository's own layout has the package folder.
+    package = root / "src" / "agentic_sdlc"
+    packaged = package / "registry.json" if package.is_dir() else None
     if args.check:
+        stale = []
         current = target.read_text(encoding="utf-8") if target.is_file() else ""
         if current != rendered:
-            print("coverage: docs/coverage.md is stale; run `agentic-sdlc coverage`")
+            stale.append("docs/coverage.md")
+        if packaged and (not packaged.is_file() or packaged.read_bytes() != spec.read_bytes()):
+            stale.append("src/agentic_sdlc/registry.json")
+        for name in stale:
+            print(f"coverage: {name} is stale; run `agentic-sdlc coverage`")
+        if stale:
             return 1
         print("coverage: up to date")
         return 0
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(rendered, encoding="utf-8")
     print(f"coverage: wrote {target.relative_to(root)}")
+    if packaged:
+        packaged.write_bytes(spec.read_bytes())
+        print("coverage: wrote src/agentic_sdlc/registry.json")
     return 0
 
 

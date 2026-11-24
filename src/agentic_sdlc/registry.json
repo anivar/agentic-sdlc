@@ -1,0 +1,1484 @@
+{
+  "$schema": "../schemas/registry.schema.json",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "ATTR-1",
+      "title": "No tool attribution in change text",
+      "statement": "Commit messages, pull request titles and bodies, merge bodies, issue text and release notes MUST NOT carry any trailer naming an AI tool or its no-reply address (Co-Authored-By, Signed-off-by, Reviewed-by, Assisted-by and the like), any footer saying the text was generated, written or made with a tool, or the robot emoji beside such a footer. The signer is the operator of record for the change. A trailer that names a role rather than a product, such as Operated-by: agent, is not attribution and is permitted.",
+      "mechanisms": [
+        "hook",
+        "githook",
+        "ci",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Remove the trailer or footer; the sign-off already names who answers for the change.",
+      "examples": {
+        "deny": [
+          "git commit -m \"Fix\" -m \"Co-Authored-By: Claude <noreply@anthropic.com>\"",
+          "git commit -m x --trailer \"Co-authored-by: Copilot <copilot@github.com>\"",
+          "gh pr create --title t --body \"Done. Generated with Claude Code\"",
+          "printf 'Note\\n\\nCo-Authored-By: Claude <noreply@anthropic.com>\\n' > msg.txt && git commit -F msg.txt"
+        ],
+        "ask": [
+          "git commit -m \"Fix the parser\"",
+          "git commit -m \"Add Claude Code plugin manifest\""
+        ]
+      }
+    },
+    {
+      "id": "ATTR-2",
+      "title": "Strict mode: no vendor mention in change text",
+      "statement": "When a repository sets attribution.mode to strict, the same text MUST NOT mention a listed vendor or product name at all, in any case or spelling.",
+      "mechanisms": [
+        "hook",
+        "githook",
+        "ci",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "plain-voice",
+      "opt_in": true,
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Off by default so a repository can say which tools it supports in its own history.",
+      "fix": "Reword without the vendor name, or switch attribution.mode back to patterns for this repository."
+    },
+    {
+      "id": "STAGE-1",
+      "title": "Stage by path",
+      "statement": "An agent MUST NOT run git add -A, --all or -u without a narrowing pathspec, git add with a root pathspec such as \".\", or git commit -a, unless the repository switches the check off (stage.deny_add_all, stage.deny_commit_all). Changes are staged by path and checked with git diff --cached --stat before the commit.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Stage the files by name (git add <path>), check git diff --cached --stat, then commit.",
+      "examples": {
+        "deny": [
+          "git add -A",
+          "git add .",
+          "git add --all",
+          "git commit -am \"x\"",
+          "sh -c 'git add -A'"
+        ],
+        "allow": [
+          "git add src/main.py",
+          "git add -A src/",
+          "git status"
+        ]
+      }
+    },
+    {
+      "id": "PUSH-1",
+      "title": "No force push to a protected branch",
+      "statement": "A force push (--force, -f, --force-with-lease, --force-if-includes, or a + refspec) to a protected branch MUST NOT be issued from an agent session. A protected branch moves by merged pull request only.",
+      "mechanisms": [
+        "hook",
+        "githook",
+        "ruleset",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Push the branch and open a pull request; a protected branch moves by merge.",
+      "examples": {
+        "deny": [
+          "git push --force origin main",
+          "git push -f origin main",
+          "git push origin +main",
+          "git push --delete origin main"
+        ],
+        "ask": [
+          "git push origin feature",
+          "git push --force origin feature"
+        ]
+      }
+    },
+    {
+      "id": "PUSH-2",
+      "title": "Moving a tag is confirmed and explained",
+      "statement": "A force push of a tag MUST be confirmed by the user, and the reason shown MUST say that every workflow triggered on tag pushes runs again at that tag.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "If the tag must move, expect every tag-triggered workflow to run again and release assets to be rebuilt.",
+      "examples": {
+        "ask": [
+          "git push --force origin refs/tags/v1.0.0",
+          "git push --tags --force"
+        ]
+      }
+    },
+    {
+      "id": "SECRET-1",
+      "title": "No key-shaped literals",
+      "statement": "Staged changes MUST NOT contain key-shaped literals: cloud access keys, forge and registry tokens, private key blocks, bearer tokens, or signing secrets, in code, tests, fixtures or documentation samples. Tests generate keys at runtime. The staged scan can be switched off for a repository (secrets.scan_staged).",
+      "mechanisms": [
+        "hook",
+        "githook",
+        "ci",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Unstage the file, move the value to the environment or a secret store, and generate test keys at runtime."
+    },
+    {
+      "id": "ASK-1",
+      "title": "A commit waits for a go-ahead",
+      "statement": "Every git commit an agent issues, including --amend, MUST be confirmed by the user before it runs, unless the repository sets confirm.commit to false.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Show the staged change and the message; commit when the user says yes.",
+      "examples": {
+        "ask": [
+          "git commit -m \"Fix the parser\"",
+          "git commit --amend --no-edit"
+        ],
+        "allow": [
+          "git commit --dry-run -m \"x\""
+        ]
+      }
+    },
+    {
+      "id": "ASK-2",
+      "title": "A push waits for a go-ahead",
+      "statement": "Every git push an agent issues MUST be confirmed by the user before it runs, unless the repository sets confirm.push to false.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Say what is pushed and where; push when the user says yes.",
+      "examples": {
+        "ask": [
+          "git push",
+          "git push origin feature"
+        ],
+        "allow": [
+          "git push --dry-run origin feature"
+        ]
+      }
+    },
+    {
+      "id": "ASK-3",
+      "title": "A post waits for a go-ahead",
+      "statement": "Every command that creates or changes something on a forge (a pull request, review, comment, issue, release, label, repository setting or an API write) MUST be confirmed by the user before it runs, unless the repository sets confirm.post to false. A draft is shown in the conversation first.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Show the draft in the conversation; post when the user says yes.",
+      "examples": {
+        "ask": [
+          "gh pr create --title t --body b",
+          "gh issue comment 1 --body hi",
+          "gh pr merge 12 --squash",
+          "gh api -X POST repos/o/r/issues -f title=t",
+          "glab mr create -t t -d d",
+          "gh attestation verify bundle.sig"
+        ],
+        "allow": [
+          "gh pr view 12",
+          "gh pr list",
+          "gh api repos/o/r",
+          "glab mr view 4",
+          "gh browse"
+        ]
+      }
+    },
+    {
+      "id": "VOICE-1",
+      "title": "Lead with the decision",
+      "statement": "A message or document written for a reader MUST open with the answer, the decision or the outcome; evidence follows. A scope cut or a miss goes in the first line.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-2",
+      "title": "Current state only",
+      "statement": "Shared documents MUST state the current state. They MUST NOT narrate earlier versions, carry version or branch labels in prose, or describe a target as \"today X, later Y\".",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-3",
+      "title": "No dashes as punctuation",
+      "statement": "Text SHOULD NOT use an em dash or a spaced en dash to join clauses. End the sentence or use a comma.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "VOICE-4",
+      "title": "No rhetorical structure",
+      "statement": "Text SHOULD NOT use counting framings (\"two things\", \"three fixes\"), triads for rhythm, \"that is why\", or an aphoristic closing line.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "The triads clause coincides with unslop (cursor/plugins, pstack). The lint catches counting framings and \"that is why\"; triads and aphorisms are judged by the reader. CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "VOICE-5",
+      "title": "End when the content ends",
+      "statement": "Text SHOULD NOT close with an offer to help or walk through, a chatbot phrase, or a restatement of what was just said, and MUST NOT open with praise for the question.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "VOICE-6",
+      "title": "Banned words",
+      "statement": "Text SHOULD NOT use seamless, robust, best-in-class, leverage, comprehensive, world-class, delve, tapestry, testament, cutting-edge or game-changing. Say the measured thing instead.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "VOICE-7",
+      "title": "No throat clearing",
+      "statement": "Text SHOULD NOT open a sentence with \"it is worth noting\", \"note that\", \"importantly\", \"in summary\" or similar; the sentence stands without the preface.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Coincides with unslop (cursor/plugins, pstack). CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "VOICE-8",
+      "title": "Evidence words carry evidence",
+      "statement": "\"Live\", \"100%\", \"PASS\", \"confirmed\", \"resolved\", \"on track\" and \"zero data loss\" MUST NOT appear without the evidence that earns them: an evidence tag, a sha, a date, a lane, or a gate. \"Green\" is never a status; give the sha, the date and the lane.",
+      "mechanisms": [
+        "ci",
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "The lint warns on the words when no evidence tag shares the line; the reader judges the rest. CI enforces it through lint-voice over the paths the caller passes as voice-paths; without them the rule is skill text."
+    },
+    {
+      "id": "EVID-1",
+      "title": "Tag every claim",
+      "statement": "Every factual clause in a deliverable MUST carry one of Verified (the source was opened), Measured (a number with its query), Inferred, or Planned. A level is never upgraded: merged is not deployed, and deployed is not verified in data.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-2",
+      "title": "Verify at the production sha",
+      "statement": "A claim about running behaviour MUST cite file:line at the sha found from the live artifact or the deployment record, never a branch head or the latest tag. Behaviour comes from production data and dates from the deployment record. Code alone is a hypothesis; an absence claim needs data.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-3",
+      "title": "Agent output is a lead",
+      "statement": "Output from an agent, a retrieval system or a review bot MUST be treated as a lead, never as evidence. Every cited line is re-read by the author before use; a quoted line is not verbatim until checked.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-4",
+      "title": "Read sources in full",
+      "statement": "A summary, digest or excerpt MUST NOT stand in for its source. The source is read in full, and the deliverable says which sources were read in full and which were not.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-5",
+      "title": "Compute a headline number twice",
+      "statement": "A number that leads a deliverable MUST be computed a second, different way before it is reported. Counts from two systems with different identity models are never divided without the join. A number that moves between identical runs is a harness artefact, not a result.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-6",
+      "title": "Sweep after one defect",
+      "statement": "When one defect is found, the pattern MUST be named and every surface it could affect swept, each reported as confirmed, not affected, or not checked.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-7",
+      "title": "Refute before filing",
+      "statement": "A finding against someone else's code MUST be verified twice before it is filed, the second pass trying to refute it.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-8",
+      "title": "Re-read before asserting",
+      "statement": "A file's current state MUST be re-read before it is asserted or edited, in particular after a checkout, stash or rebase. A change request's current state is re-read before it is updated.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-9",
+      "title": "Survey before building",
+      "statement": "Before custom code is written, established tools MUST be surveyed (tool, data source, maintenance, fit), the survey recorded and the pick named; custom code covers only the gap. When a partner's or vendor's documents define a mechanism, that definition is followed rather than a new mode invented.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "EVID-10",
+      "title": "Record what a source taught",
+      "statement": "Research MUST produce a dated document in the topic's folder: the question, the sources read (full or partial), the method, the findings with evidence, the open questions and the exact commands, so it is never redone. An earlier document is never overwritten.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "evidence",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-9",
+      "title": "Open points stay open",
+      "statement": "A point a reviewer raised, or one the decider has not settled, MUST be presented as open: the options, who decides, by when. Before a repository document or plan is pushed, every normative sentence that settles a question is listed for the decider.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-10",
+      "title": "Misses are reported as misses",
+      "statement": "A missed target, a skipped step or a scope cut MUST be stated in the headline, in plain words, without apology language and without hedging.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-11",
+      "title": "Shared deliverables are technical only",
+      "statement": "A shared deliverable MUST name no individual, assign no blame or credit, read no one's motives, and use no \"ours\" and \"yours\"; it names the system and who picks it up.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-12",
+      "title": "Verbatim words",
+      "statement": "When the decider gives words, they MUST be used verbatim. When the decider accepts a draft, polishing stops.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "VOICE-13",
+      "title": "A draft promises nothing its signer did not say",
+      "statement": "A draft in someone's name MUST promise nothing they did not say: it gives the findings, a suggested order and what good looks like, and the owner named in the plan carries the work.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plain-voice",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-1",
+      "title": "Findings on the introducing change, at the head sha",
+      "statement": "A review finding MUST be posted only on the change that introduced the code, verified at that change's head sha, and limited to what is essential.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-2",
+      "title": "One finding per thread, in Conventional Comments",
+      "statement": "Each inline thread MUST carry one finding with a Conventional Comments label, the defect, file:line, the consequence, the rule broken, the required behaviour, and at most one suggestion. No hedges.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-3",
+      "title": "The summary carries the decision",
+      "statement": "The review summary MUST be two to four lines and end with the decision: approve, request changes, or needs a decider.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-4",
+      "title": "Mutate before trusting a test",
+      "statement": "A test MUST be judged against the code it exercises, never from its body or name. One condition the change adds is inverted and the suite run; a mutant the suite does not catch is a finding that names the missing case; a mutant that changed nothing proves nothing. The count of mutants and catches is reported.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "The probe (invert one condition, run the suite, restore) is rewritten from code-review-and-quality (addyosmani/agent-skills); the count and the dead-mutant reading are the author's."
+    },
+    {
+      "id": "REVIEW-5",
+      "title": "Review rounds fix only real defects",
+      "statement": "A review round MUST fix real defects only. A cosmetic bot suggestion gets a one-line verdict and no push. On the author's own change every bot thread is answered (fixed, or refuted with evidence) and resolved; on another author's change the reply is left and the author resolves.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-6",
+      "title": "Confirm the diff is absent before merging",
+      "statement": "Before a change is reported on, merged or closed, its diff MUST be confirmed absent from the target. A stacked change is checked against its parent's tip, and a conflict resolution is re-diffed against the target's current file.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-7",
+      "title": "Adversarial self-review before showing",
+      "statement": "Every plan, finding, draft and change MUST be reviewed adversarially before it is shown: which claim rests on a source not opened in this session, which number was recalled rather than computed, which action does damage if the premise is wrong. Before any push, merge or live change, what the review finds is fixed first.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-8",
+      "title": "Sort proposals by what ships",
+      "statement": "A speed, cost or infrastructure proposal MUST be sorted into internals-only or changes the released artifact (versioning, signing, distribution). The second kind needs a strong reason, stated.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-9",
+      "title": "One dependency per change",
+      "statement": "A dependency upgrade MUST be reviewed against its changelog, isolated per package, verified by the test suite before and after, with the lockfile diff reviewed and the lockfile never edited by hand.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from code-review-and-quality (addyosmani/agent-skills)."
+    },
+    {
+      "id": "REVIEW-10",
+      "title": "Test and infrastructure work leaves shipped code alone",
+      "statement": "Test or infrastructure work MUST NOT change shipped code without an explicit ask. A negative-test probe runs in a worktree or a temporary repository, never on a checkout with uncommitted work.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "REVIEW-11",
+      "title": "A fresh reader reviews a draft",
+      "statement": "A plan or design the agent drafted MUST be read by a reader in a fresh context before it goes to the decider for approval: one subagent that receives the document (its path, or its text verbatim when it exists only in the conversation), the decider's ask verbatim when there is one, read access to the repository and the document's sources when they exist, and nothing else from the drafting conversation. More than one reader needs the decider's agreement. The reader paraphrases the document before any finding, and a wrong paraphrase is itself a finding. When no subagent can run, or the reader fails twice, the review is reported as a self-review only (REVIEW-7).",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "The fresh-context reviewer and the paraphrase-first read follow the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0), restated; no text is copied. That model runs several reviewers per stage; one reader is the default here."
+    },
+    {
+      "id": "REVIEW-12",
+      "title": "Every finding gets one answer",
+      "statement": "Each finding on the author's own work MUST get exactly one answer: fixed (the change is made); accepted (the finding is right and the exact change is proposed, when the author may not edit); refuted with evidence the reviewer could have read; given to the decider when the only evidence lies outside what the reviewer could read; or declined in one line, for a finding the reviewer labelled nitpick or a cosmetic bot suggestion (REVIEW-5). The author MUST NOT refute a comprehension gap, change a finding's label or decoration, or add text only to satisfy a reviewer. Every answer is shown to the decider (VOICE-9). A refutation the decider saw and did not overrule, or a finding the decider accepted as a known risk, stays settled across rounds; a fixed finding raised again at the same place re-opens; a reviewer that failed or returned nothing is reported as not run, never as no findings.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "review-change",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "The answer kinds and the settled-finding rules follow egm-resolve and egm-review-loop in the Elephant-Goldfish Model (google/elephant-goldfish-model, Apache-2.0), restated; no text is copied."
+    },
+    {
+      "id": "PLAN-1",
+      "title": "One plan file, dated steps with done-when",
+      "statement": "A plan MUST be one file per project or topic, with dated steps of at most three days, each with one owner, a date the owner named, and a \"done when\" someone else can check. Each step is reversible or says how it is undone.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-2",
+      "title": "Assumptions tied to tests",
+      "statement": "Every assumption MUST be numbered and tied to the test, query or vendor answer that proves it, or marked open. The first step attacks the riskiest assumption, in vertical slices that work end to end.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-3",
+      "title": "Cut order and never-cut list",
+      "statement": "A plan MUST carry the order in which work is cut if time runs short and the list that is never cut. A slip is reported before its date, a scope cut goes in the headline, and a baseline is never moved silently.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-4",
+      "title": "Behaviour change stated up front",
+      "statement": "A design or plan MUST say whether it breaks existing behaviour, the exact behaviour change and what was parked, and carry a failure-mode table (failure, allowed impact, mechanism, test) and a per-client compatibility table. New pieces degrade alone; one bug never stops the business.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-5",
+      "title": "Gates carry escalation ladders",
+      "statement": "Any queue, gate or rule a plan proposes MUST carry its escalation ladder: self-service, a named decider role, the lanes that pass without the decider, a ceiling, each with a response time.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-6",
+      "title": "No resourcing, trivia or blocker words",
+      "statement": "A plan MUST NOT contain headcount or resourcing, operational trivia, alarm phrases (blocker, urgent, critical) in a repository document, or a follow-up-ticket line in place of a decision.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-7",
+      "title": "Decisions in the decider's words",
+      "statement": "A plan MUST lay out options; the decision MUST be recorded in the decider's own words with who decides and by when. The decider approves; each delivery step names a team or role as its owner.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-8",
+      "title": "Newest production version",
+      "statement": "A design MUST use the newest version the platform runs in production, after checking availability. It is never designed on a beta and never chooses an older version to stay compatible with something not in production.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-9",
+      "title": "Platform changes prove out on staging",
+      "statement": "A platform or CI change MUST prove out on staging and be validated there before production.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PLAN-10",
+      "title": "Reconcile the plan with the ask",
+      "statement": "Before a plan is shown, it MUST be compared with the ask it answers, and every contradiction is listed with both texts quoted. A slip in the plan is corrected to match the ask; a deliberate departure becomes a Decisions row with options, who decides and by when (PLAN-7). An addition is listed when it changes an interface, a dependency or what ships.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "plan-project",
+      "since": "1.2.0",
+      "status": "active",
+      "notes": "Follows the check of a draft against its brief in egm-draft (Elephant-Goldfish Model, google/elephant-goldfish-model, Apache-2.0), restated; no text is copied."
+    },
+    {
+      "id": "GRILL-1",
+      "title": "Rounds over the frontier",
+      "statement": "A grilling MUST ask the whole frontier in one round: every question whose prerequisites are settled, numbered, each with a recommended answer worded so that \"yes\" accepts it. A question that depends on another still open belongs to a later round.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "grill-plan",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from grilling (mattpocock/skills)."
+    },
+    {
+      "id": "GRILL-2",
+      "title": "Facts are the agent's job",
+      "statement": "A fact available from the environment MUST be looked up, never asked. Only decisions go to the decider.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "grill-plan",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from grilling (mattpocock/skills)."
+    },
+    {
+      "id": "GRILL-3",
+      "title": "The session ends when the frontier is empty",
+      "statement": "An agent MUST NOT act on a plan until the decider confirms a shared understanding. Every settled decision MUST be recorded in the plan's Decisions table or as a decision record.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "grill-plan",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from grilling (mattpocock/skills)."
+    },
+    {
+      "id": "DECIDE-1",
+      "title": "A record for a hard-to-reverse, surprising trade-off",
+      "statement": "An architecture decision record MUST be written only when all three hold: the decision is hard to reverse, surprising without context, and the result of a real trade-off. One paragraph is enough.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from domain-modeling (mattpocock/skills)."
+    },
+    {
+      "id": "DECIDE-2",
+      "title": "Glossary terms are opinionated and implementation-free",
+      "statement": "GLOSSARY.md MUST pick one term per concept, list the words to avoid, define what the thing is in one or two sentences, and carry no implementation detail.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from domain-modeling (mattpocock/skills)."
+    },
+    {
+      "id": "DECIDE-3",
+      "title": "Knowledge in tables with calibration",
+      "statement": "Shared knowledge MUST go where the second reader can reach it, in the repository, as tables with fixed columns and calibration labelled honestly (\"unverified\", never blank) for glossaries, research documents and plan tables; the decision record is the prose exception, one paragraph.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "DECIDE-4",
+      "title": "Records carry no names",
+      "statement": "A decision record, glossary or research document MUST name systems and roles, never individuals.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "DECIDE-5",
+      "title": "One file per topic, never another's file",
+      "statement": "A plan, record or research document MUST be one file per topic. Before a write, the path is checked; a file not created in this session is not overwritten.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "DECIDE-6",
+      "title": "Conflicts with a record are surfaced",
+      "statement": "Output that contradicts an existing decision record MUST say so and why it is worth reopening, never override it silently.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "decision-records",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from the domain conventions of setup-matt-pocock-skills (mattpocock/skills)."
+    },
+    {
+      "id": "TICKET-1",
+      "title": "One ticket per real work item",
+      "statement": "Tickets MUST be one per real work item, never one per checklist step. Each is a vertical slice, demoable or verifiable on its own and sized to one working session.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from to-tickets (mattpocock/skills)."
+    },
+    {
+      "id": "TICKET-2",
+      "title": "Acceptance and blockers",
+      "statement": "Every ticket MUST carry what to build from the user's perspective, acceptance criteria someone else can check, and the tickets that block it, as native dependency links where the tracker has them.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from to-tickets (mattpocock/skills)."
+    },
+    {
+      "id": "TICKET-3",
+      "title": "No identifiers, secrets or names",
+      "statement": "A ticket or change description MUST NOT carry infrastructure identifiers, secret paths, partner URLs or colleagues' names. It describes the step and points to the internal runbook.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "TICKET-4",
+      "title": "Full links",
+      "statement": "Every reference to another change or ticket MUST be a full link, never a bare number.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "TICKET-5",
+      "title": "Approval before publishing",
+      "statement": "The breakdown MUST be shown and approved in the conversation before anything is published. Publishing is a post and waits for its go-ahead (ASK-3). The parent item is never closed or edited by the breakdown.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from to-tickets (mattpocock/skills)."
+    },
+    {
+      "id": "TICKET-6",
+      "title": "Wide refactors use expand and contract",
+      "statement": "A mechanical change whose blast radius spans the codebase MUST be sequenced as expand, migrate in batches, contract, each batch its own ticket, so every step keeps the checks passing.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "cut-tickets",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from to-tickets (mattpocock/skills)."
+    },
+    {
+      "id": "TEST-1",
+      "title": "Seams agreed before tests",
+      "statement": "Tests MUST be written at seams agreed with the decider first, each proposed seam with a line on what it catches and what it misses.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
+    },
+    {
+      "id": "TEST-2",
+      "title": "Red before green",
+      "statement": "The failing test MUST be written first and only enough code to pass it follows: one seam, one test, one minimal implementation per cycle. A refactor is its own slice after green (SLICE-3), not part of the loop.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
+    },
+    {
+      "id": "TEST-3",
+      "title": "Expected values from an independent source",
+      "statement": "An expected value MUST come from a known-good literal, a worked example or the specification, with the derivation in the test, never recomputed the way the code computes it. A test that asserts only a range or a sign does not count.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
+    },
+    {
+      "id": "TEST-4",
+      "title": "Mock only at system boundaries",
+      "statement": "Mocks MUST sit only at external services, time, randomness and the file system, never at the code under test, pure functions, value objects or internal collaborators.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from tdd (mattpocock/skills)."
+    },
+    {
+      "id": "TEST-5",
+      "title": "Gate on exit codes",
+      "statement": "A commit MUST be gated on the checks' exit codes (check && test && git commit), never on output that is printed and ignored. A check that passed on unchanged code is not re-run for reassurance.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "TEST-6",
+      "title": "Suites one at a time against shared state",
+      "statement": "Test suites that share a database or external state MUST run one at a time, and results are compared by named failures, not counts.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "TEST-7",
+      "title": "Enumerate branches before repairing",
+      "statement": "Before a failing test is repaired, the branches the code takes MUST be enumerated. A better-shaped test replaces a patched one, and the mutation check (REVIEW-4) confirms it.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "test-first",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "SLICE-1",
+      "title": "One change per step, reviewable in one sitting",
+      "statement": "Work MUST land as small, independently reviewable pieces with clear acceptance, one pull request per plan step, so the review load stays low.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "The size guidance follows code-review-and-quality (addyosmani/agent-skills)."
+    },
+    {
+      "id": "SLICE-2",
+      "title": "Nothing half-done reaches the shared branch",
+      "statement": "A step MUST be merged complete, with its tests, documentation and, where the repository keeps one, its changelog entry, or not at all. Incomplete work stays behind a flag or on its branch.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from incremental-implementation (addyosmani/agent-skills)."
+    },
+    {
+      "id": "SLICE-3",
+      "title": "Scope discipline",
+      "statement": "A change MUST touch only what the step requires. Adjacent cleanups, modernised syntax and unrelated refactors are noted and left for their own step.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from incremental-implementation (addyosmani/agent-skills)."
+    },
+    {
+      "id": "SLICE-4",
+      "title": "Verify once per change",
+      "statement": "Each verification command MUST run after a change that could affect it, and is not repeated on unchanged code.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from incremental-implementation (addyosmani/agent-skills)."
+    },
+    {
+      "id": "SLICE-5",
+      "title": "Stage by path and read the index",
+      "statement": "Changes MUST be staged by path, as whole files by path or as hunks through git apply --cached when another session may have edited the file, and git diff --cached --stat is read before the commit (STAGE-1).",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "SLICE-6",
+      "title": "A go-ahead per commit, per push, per post",
+      "statement": "Every commit, push and post MUST wait for its own go-ahead. Approval in one context does not extend to the next (ASK-1, ASK-2, ASK-3).",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "SLICE-7",
+      "title": "Auto-merge only where allowed",
+      "statement": "Auto-merge MUST be armed only where the decider allowed it for that repository and branch. A merge to a release branch is a deliberate human act.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "SLICE-8",
+      "title": "Fresh new files, confirmed deletions",
+      "statement": "Before a new file is written its path MUST be confirmed absent; before a deletion the file is confirmed untracked, or its removal is confirmed by the decider.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "SECRET-2",
+      "title": "Never print a secret",
+      "statement": "A secret MUST never be printed. Give the variable name, file:line, length or hash. Token-bearing lines are excluded before a log is summarised, and a masking regex is never trusted.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "PROD-1",
+      "title": "Production is read-only",
+      "statement": "Production systems and data MUST be treated as read-only unless the decider says otherwise for that specific action.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "DESIGN-1",
+      "title": "Deep modules",
+      "statement": "A module MUST hide a lot of behaviour behind a small interface, placed at a clean seam and testable through that interface. Depth is payback for callers and locality for maintainers.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "deep-modules",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills), after Ousterhout."
+    },
+    {
+      "id": "DESIGN-2",
+      "title": "The interface is the test surface",
+      "statement": "Tests MUST cross the same seam callers do. A test that has to reach past the interface shows the module is the wrong shape.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "deep-modules",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills)."
+    },
+    {
+      "id": "DESIGN-3",
+      "title": "Two adapters make a seam",
+      "statement": "A seam MUST NOT be introduced until something varies across it. One adapter is a hypothetical seam and plain indirection.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "deep-modules",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills)."
+    },
+    {
+      "id": "DESIGN-4",
+      "title": "Replace tests after deepening",
+      "statement": "After a cluster of shallow modules is deepened, the tests at the old modules MUST be deleted and replaced by tests at the new interface.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "deep-modules",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills)."
+    },
+    {
+      "id": "DESIGN-5",
+      "title": "Design it twice, with consent",
+      "statement": "Alternative interfaces MUST be explored with parallel agents only after the decider agreed to the fan-out. Otherwise one design is explored at a time.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "deep-modules",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from codebase-design (mattpocock/skills), after Ousterhout's design it twice."
+    },
+    {
+      "id": "SETUP-1",
+      "title": "One block in the repository's agent file",
+      "statement": "The repository's AGENTS.md or CLAUDE.md MUST carry one \"Rules that bind\" block that points at docs/agents/ and .agentic-sdlc.json. The file that exists is edited; a second one is never created beside it. When neither file exists, the decider is asked which one to create; the skill never picks.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "setup-conventions",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from setup-matt-pocock-skills (mattpocock/skills)."
+    },
+    {
+      "id": "SETUP-2",
+      "title": "Tracker and labels recorded first",
+      "statement": "Where tickets live and which labels are used MUST be recorded in docs/agents/tracker.md before any skill publishes a ticket.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "setup-conventions",
+      "since": "1.0.0",
+      "status": "active",
+      "notes": "Rewritten from setup-matt-pocock-skills (mattpocock/skills)."
+    },
+    {
+      "id": "SETUP-3",
+      "title": "Mechanisms arrive as a reviewed change",
+      "statement": "The repository configuration, the reusable workflow and the ruleset import MUST land as a reviewed pull request, never silently.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "setup-conventions",
+      "since": "1.0.0",
+      "status": "active"
+    },
+    {
+      "id": "TRACE-1",
+      "title": "An untraceable gated command is confirmed",
+      "statement": "When a command mentions a commit, a push, a bulk add or a forge write but the parser cannot trace it to a git, gh or glab invocation (a variable, an interpreter, an unusual wrapper), the command MUST be confirmed by the user before it runs. A gated command inside a command or process substitution counts as a call. A command made only of programs that print or search their arguments, with no substitution, is text, not a call, and needs no confirmation.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Run the git, gh or glab command directly so the hook can read it, or confirm this one yourself.",
+      "examples": {
+        "ask": [
+          "some-tool --run \"git commit -m x\"",
+          "cat \"$(git push origin main)\"",
+          "echo 'git push origin main' | sh"
+        ],
+        "allow": [
+          "rg -n \"git push\" docs",
+          "printf '| git push origin main | RUN-1 |\\n' >> .agent/progress.md"
+        ]
+      }
+    },
+    {
+      "id": "TRACE-2",
+      "title": "An untraced command is suspicious when configured",
+      "statement": "When the parser cannot trace a command to a git, gh or glab invocation and trace.untracked is ask or deny, the hook MUST answer with that decision, unless every simple command in it is a read-only program.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.1.0",
+      "status": "active",
+      "fix": "Run the git, gh or glab command directly so the hook can trace it, or set trace.untracked to allow.",
+      "examples": {
+        "allow": [
+          "python3 -c 'print(1)'",
+          "ls -la | grep README"
+        ]
+      }
+    },
+    {
+      "id": "RUN-1",
+      "title": "An unattended run never waits on a person",
+      "statement": "When whoever launches a run sets AGENTIC_SDLC_UNATTENDED, the guard MUST NOT ask, because an ask there stops the run at a prompt nobody answers. A commit on a branch that is not protected MUST pass so the run can checkpoint; a push MUST pass only to a branch that matches unattended.push_branches and is not protected, with no force, tags or deletion; every other call that would ask MUST be refused with a reason that tells the agent not to retry, to carry on and to report the call.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active",
+      "decision": "deny",
+      "opt_in": true,
+      "fix": "Carry on with the next step, and list the refused call under held calls in the run report so a person can run it.",
+      "examples_unattended": {
+        "allow": [
+          "git commit -m \"Add the parser\"",
+          "git commit -m \"$(cat msg.txt)\"",
+          "git push origin agent/work",
+          "git add src/parser.py && git commit -m \"Add the parser\"",
+          "git push",
+          "git push -u origin HEAD"
+        ],
+        "deny": [
+          "git push origin main",
+          "git push origin feature/other",
+          "git push --force origin agent/work",
+          "git push --tags",
+          "gh pr create --title \"Add the parser\" --body \"Adds it.\"",
+          "cat .env"
+        ]
+      },
+      "notes": "Opt-in through the environment of the Claude Code process; .agentic-sdlc.json cannot set it. The examples run with AGENTIC_SDLC_UNATTENDED=1 on branch agent/work with unattended.push_branches set to [\"agent/*\"]."
+    },
+    {
+      "id": "RUN-2",
+      "title": "A run nobody watches starts with a finish line, a cap and its own branch",
+      "statement": "A run that nobody watches MUST start with a finish condition that a check can show, a spend cap, and a working branch or worktree of its own, with AGENTIC_SDLC_UNATTENDED set by whoever launches it. It SHOULD run through the platform's own loop (/goal in auto mode, a background session, claude -p, or a scheduled task) rather than a loop of its own.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "RUN-3",
+      "title": "A run ends with a report in a file",
+      "statement": "An unattended run MUST end by writing a run report to a file: the commits it made with their shas, what it checked and with which command, every call the guard held, what failed or was skipped, and what is left. A held call MUST NOT be retried or worked around during the run.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "RUN-4",
+      "title": "An agent may start an unattended run, and the start is recorded",
+      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, is neither asked about nor refused, and the guard MUST record the start under RUN-4 in the decision record, whatever record.decisions says. In the run it starts, RUN-1 holds.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "owner": "unattended-runs",
+      "since": "2.0.0",
+      "status": "active",
+      "fix": "Nothing to fix: the start is recorded, and the run it starts follows RUN-1.",
+      "examples": {
+        "allow": [
+          "AGENTIC_SDLC_UNATTENDED=1 claude -p \"fix the parser\"",
+          "env AGENTIC_SDLC_UNATTENDED=1 claude -p x",
+          "export AGENTIC_SDLC_UNATTENDED=1",
+          "rg -n AGENTIC_SDLC_UNATTENDED src",
+          "unset AGENTIC_SDLC_UNATTENDED"
+        ]
+      },
+      "examples_unattended": {
+        "allow": [
+          "AGENTIC_SDLC_UNATTENDED=1 claude -p x"
+        ]
+      },
+      "decision": "record"
+    },
+    {
+      "id": "HANDOFF-1",
+      "title": "State that spans sessions lives in files",
+      "statement": "Work that spans more than one session or context window MUST keep its state in files in the working tree: a progress file (what was done, what is next, decisions and go-aheads given, held calls) and a feature list in JSON whose entries later sessions change only in their status and evidence fields.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-2",
+      "title": "A session starts by reading and ends by committing",
+      "statement": "Each session of such work MUST start by reading the progress file and the recent git log and running the project's basic check, fixing a broken tree before new work, and MUST end with a checkpoint commit and a progress entry that leave the tree in a state that could merge.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-3",
+      "title": "One feature at a time, passing only on evidence",
+      "statement": "A session SHOULD take one feature at a time. A feature MUST be marked passing only after an end-to-end check whose command and result are recorded; where the work sits near the limit of what the model does reliably, someone other than the session that built it (a fresh agent or a person) SHOULD judge it.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-4",
+      "title": "What is settled is written down when it is settled",
+      "statement": "A go-ahead, a boundary, a decision or a held call MUST be written to the progress file when it is settled, because a conversation does not survive compaction. After a compaction or in a new session the agent MUST re-read the progress file and the sources a claim rests on, and MUST NOT treat the summary as evidence.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "HANDOFF-5",
+      "title": "Knowledge that outlives the task goes to the repository",
+      "statement": "Knowledge that outlives the task MUST go where the next reader finds it: a convention to the repository's agent instructions, a decision to a decision record, a finding to a dated research document. A session's own memory SHOULD hold only preferences and pointers to those files.",
+      "mechanisms": [
+        "skill"
+      ],
+      "owner": "session-handoff",
+      "since": "2.0.0",
+      "status": "active"
+    },
+    {
+      "id": "GUARD-1",
+      "title": "Hook bypass flags are refused",
+      "statement": "An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, and git config setting core.hooksPath or include.path are refused.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "deny",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Run the command without the flag and let the hooks run; if a hook is wrong, fix the hook.",
+      "examples": {
+        "deny": [
+          "git commit --no-verify -m \"x\"",
+          "git commit -n -m \"x\"",
+          "git push --no-verify origin feature",
+          "git -c core.hooksPath=/dev/null commit -m \"x\"",
+          "git config core.hooksPath /tmp/x",
+          "git config --global core.hooksPath /tmp/x"
+        ],
+        "ask": [
+          "git commit -m \"x\""
+        ],
+        "allow": [
+          "git config --get core.hooksPath",
+          "git config user.name Someone"
+        ]
+      }
+    },
+    {
+      "id": "GUARD-2",
+      "title": "The guard's own configuration is changed knowingly",
+      "statement": "An agent's edit to .agentic-sdlc.json, a git hook, .claude/settings.json, .claude/settings.local.json or .pre-commit-config.yaml MUST be confirmed by the user before it is written.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "setup-conventions",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Say what the edit changes in the guard and why; write it when the user says yes."
+    },
+    {
+      "id": "AGENT-1",
+      "title": "The agent decides; the guard records what it would have asked",
+      "statement": "In agent mode, the default, a call that a rule other than GUARD-2 or SECRET-3 would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A GUARD-2 or SECRET-3 ask MUST still go to a person, and MUST be refused under RUN-1 when the launcher set AGENTIC_SDLC_UNATTENDED, because an edit of the guard's configuration can switch the refusals off. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
+      "mechanisms": [
+        "hook"
+      ],
+      "decision": "record",
+      "owner": "setup-conventions",
+      "since": "2.0.0",
+      "status": "active",
+      "fix": "Nothing to fix: the call runs and the decision record shows which rule would have asked. Set confirm mode where a person must answer.",
+      "notes": "The rule examples elsewhere in this registry state what each rule decides in confirm mode; agent mode then turns each ask into a recorded allow.",
+      "examples_agent": {
+        "allow": [
+          "git commit -m \"Add the parser\"",
+          "git push origin main",
+          "gh pr create --title \"Add it\" --body \"Adds it.\""
+        ],
+        "ask": [
+          "cat .env"
+        ],
+        "deny": [
+          "git add -A",
+          "git commit --no-verify -m \"x\"",
+          "git push --force origin main"
+        ]
+      }
+    },
+    {
+      "id": "SECRET-3",
+      "title": "Reading a secret file asks",
+      "statement": "Reading, grepping, copying or sending a file that by name holds credentials (.env files, private keys, .netrc, .npmrc, .pypirc, credentials.json, PEM and keystore files) MUST be confirmed by the user before it happens.",
+      "mechanisms": [
+        "hook",
+        "skill"
+      ],
+      "decision": "ask",
+      "owner": "thin-slices",
+      "since": "1.0.0",
+      "status": "active",
+      "fix": "Name the variable or the file and its length or hash instead; read the file only when the user says yes.",
+      "examples": {
+        "ask": [
+          "cat .env",
+          "head -c 40 ~/.ssh/id_ed25519",
+          "cp .env.production /tmp/x"
+        ],
+        "allow": [
+          "cat README.md",
+          "head -n 5 src/main.py",
+          "cp .env.example .env.local.example",
+          "cp .env.example .env"
+        ]
+      }
+    }
+  ],
+  "conformance": "The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY in the statements are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in all capitals. A rule whose mechanism lists hook can be switched off for a repository through .agentic-sdlc.json; the statement names the key."
+}
