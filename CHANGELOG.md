@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-24)
 
 This release breaks existing behaviour: the guard's default is agent mode
 ([ADR 0008](docs/adr/0008-the-agent-decides-and-the-guard-records.md)).
@@ -11,14 +11,21 @@ This release breaks existing behaviour: the guard's default is agent mode
   keeps that rule with AGENT-1: commits, pushes and posts (ASK-1, ASK-2, ASK-3), a moved tag
   (PUSH-2), an untraced gated command (TRACE-1). A read of a secret-named file (SECRET-3) and an
   edit of the guard's configuration (GUARD-2) still ask, because such an edit can switch every
-  refusal off; with `AGENTIC_SDLC_UNATTENDED` set they are refused (RUN-1). The refusals stay: bulk staging (STAGE-1), hook
-  bypass (GUARD-1), a force push or delete of a protected branch (PUSH-1), attribution (ATTR-1,
-  ATTR-2), a staged secret (SECRET-1). A plain push to a protected branch runs and is recorded.
+  refusal off; with `AGENTIC_SDLC_UNATTENDED` set they are refused (RUN-1). The refusals stay:
+  bulk staging (STAGE-1), hook bypass (GUARD-1), a force push or delete of a protected branch
+  (PUSH-1), attribution (ATTR-1, ATTR-2), a staged secret (SECRET-1). A plain push to a protected
+  branch runs and is recorded.
 - `"mode": "confirm"` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_MODE=confirm`, keeps the 1.x
   behaviour. The variable overrides the file. An unknown value in either, or a configuration file
   the guard cannot read, means confirm.
 - The decision record keeps every AGENT-1 and RUN-4 decision whatever `record.decisions` says;
   other decisions follow the setting.
+- The PyPI distribution is `agentic-sdlc-guard`. The PyPI project named `agentic-sdlc` is a
+  different project: the 1.1.0 upload was refused, and `uvx agentic-sdlc`, which the README
+  showed, ran that other package. The command stays `agentic-sdlc` and the import stays
+  `agentic_sdlc`; the README runs the command with `uvx --from agentic-sdlc-guard`.
+- The reusable workflow no longer declares the `GITLEAKS_LICENSE` secret, as 1.1.0 announced. A
+  caller that still passes it must drop it.
 
 ### Added
 

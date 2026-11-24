@@ -1,7 +1,7 @@
 [project]
-name = "agentic-sdlc"
-version = "1.1.0"
-description = "Agent skills and non-negotiable checks for a software delivery process run with coding agents: evidence-tagged claims, reviewable slices, a confirmed commit and push, no tool attribution, no key-shaped literals."
+name = "agentic-sdlc-guard"
+version = "2.0.0"
+description = "Agent skills and non-negotiable checks for a software delivery process run with coding agents: evidence-tagged claims, reviewable slices, agent-decided commits and pushes on the record, no tool attribution, no key-shaped literals."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -35,6 +35,8 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = "src"
+# The distribution is agentic-sdlc-guard; the import package keeps its name.
+module-name = "agentic_sdlc"
 
 [tool.ruff]
 target-version = "py39"

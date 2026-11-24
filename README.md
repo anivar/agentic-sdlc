@@ -62,7 +62,7 @@ upload is not a supported path.
 **Every agent and every person**, the git hooks, from inside a repository:
 
 ```bash
-uvx agentic-sdlc hooks install
+uvx --from agentic-sdlc-guard agentic-sdlc hooks install
 ```
 
 This copies the package under `.git/` and writes `commit-msg` (ATTR-1, ATTR-2), `pre-commit`
@@ -317,12 +317,13 @@ first unpushed commit, and the push and the post still ask because they bound th
 
 ## Try the hook by hand
 
-From 1.1.0 the CLI is on PyPI; `uvx` runs it without an install. For the development version
-at the repository's head instead of the release, use
+The CLI's PyPI distribution is `agentic-sdlc-guard`; the command it installs is `agentic-sdlc`.
+The PyPI project named `agentic-sdlc` is a different project, so never run `uvx agentic-sdlc`.
+For the development version at the repository's head instead of the release, use
 `uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc`:
 
 ```bash
-alias agentic-sdlc='uvx agentic-sdlc'
+alias agentic-sdlc='uvx --from agentic-sdlc-guard agentic-sdlc'
 agentic-sdlc guard 'git add -A'
 agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 agentic-sdlc guard 'git push --force origin main'
