@@ -68,3 +68,27 @@ jobs:
             name="$(basename "$dir")"
             test -f "$HOME/.claude/skills/$name/SKILL.md" || { echo "missing $name"; exit 1; }
           done
+
+  codex:
+    name: codex
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Load the plugin into Codex and check that it sees every skill
+        run: |
+          npm install -g @openai/codex@0.172.0
+          # Outside the workspace: Codex copies the marketplace source into its home.
+          export CODEX_HOME="$HOME/.cache/agentic-sdlc/codex-home"
+          mkdir -p "$CODEX_HOME"
+          codex plugin marketplace add "$GITHUB_WORKSPACE"
+          codex plugin add agentic-sdlc@agentic-sdlc
+          codex debug prompt-input > "$CODEX_HOME/prompt.json"
+          for dir in skills/*/; do
+            name="$(basename "$dir")"
+            grep -q "agentic-sdlc:$name" "$CODEX_HOME/prompt.json" || { echo "codex does not load $name"; exit 1; }
+          done

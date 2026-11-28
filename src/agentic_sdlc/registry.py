@@ -123,7 +123,7 @@ def validate(data: dict[str, Any]) -> list[str]:
         if "fix" in rule and (not isinstance(rule["fix"], str) or len(rule["fix"]) < 10):
             problems.append(f"{where}: fix must be a sentence")
         # An unattended run (RUN-1) never asks, so its examples are only allow or deny. Agent mode
-        # (AGENT-1) asks only for the kept asks (GUARD-2, SECRET-3).
+        # (AGENT-1) asks only for the kept asks (GUARD-2, SECRET-2, SECRET-3, PROD-1).
         for key, allowed in (
             ("examples", {"deny", "ask", "allow"}),
             ("examples_unattended", {"deny", "allow"}),
@@ -166,7 +166,7 @@ FALLBACK_TITLES = {
     "PUSH-1": "No force push to a protected branch",
     "PUSH-2": "Moving a tag is confirmed and explained",
     "SECRET-1": "No key-shaped literals",
-    "SECRET-3": "Reading a secret file asks",
+    "SECRET-3": "A secret file is read only on a person's go-ahead",
     "ASK-1": "A commit waits for a go-ahead",
     "ASK-2": "A push waits for a go-ahead",
     "ASK-3": "A post waits for a go-ahead",

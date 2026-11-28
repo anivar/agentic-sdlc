@@ -9,7 +9,7 @@ description: >
   Triggers on: "implement the next step", "land this", "next step from the plan", "ship this
   slice", "ready to commit", "open a PR", "is it ready to merge", "what should I stage".
 license: MIT
-compatibility: Any git repository; the hook side needs the agentic-sdlc plugin in Claude Code.
+compatibility: Any git repository; the hook side needs the agentic-sdlc plugin in Claude Code or Codex.
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
@@ -41,8 +41,8 @@ that keep a change small enough to review.
 | PUSH-1 | No force push to a protected branch | Hook: refused. A protected branch moves by merged pull request only. |
 | PUSH-2 | Moving a tag is confirmed and explained | Hook: asks, and says that every workflow triggered on tag pushes runs again and release assets may be rebuilt. |
 | SECRET-1 | No key-shaped literals | Hook: staged changes are scanned before the commit; CI runs TruffleHog. Tests generate keys at runtime; documentation samples use placeholders. |
-| SECRET-2 | Never print a secret | Variable name, `file:line`, length or hash. Exclude token-bearing lines before summarising a log. Never trust a masking regex. |
-| PROD-1 | Production is read-only | Unless the decider says otherwise for that action. The production targets are the ones `docs/agents/conventions.md` names. |
+| SECRET-2 | Never print a secret | Variable name, `file:line`, length or hash. Exclude token-bearing lines before summarising a log. Never trust a masking regex. The hook refuses `env`, `printenv` and an `echo` of a credential variable in agent mode; `${#NAME}` gives the length. |
+| PROD-1 | Production is read-only | Unless the decider says otherwise for that action. The production targets are the ones `docs/agents/conventions.md` names. The hook refuses a database write whose command names production in agent mode; it cannot see a target behind a neutral variable, so production credentials for agents are read-only. |
 | REVIEW-6 | Confirm the diff is absent before merging | And re-diff a conflict resolution against the target's current file. |
 | TEST-5 | Gate on exit codes | `check && test`, then the commit on its go-ahead, gated on the exit codes. |
 | TRACE-1 | An untraceable gated command is confirmed | Hook: a command that mentions a commit, push, bulk add or forge write the parser cannot trace (a variable, an interpreter, an unusual wrapper), or runs one inside a substitution, asks. Printing or searching for one (`rg "git push"`, a held call written with `printf`) passes. |

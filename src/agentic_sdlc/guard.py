@@ -28,6 +28,7 @@ RULE_IDS = (
     "PUSH-1",
     "PUSH-2",
     "SECRET-1",
+    "SECRET-2",
     "SECRET-3",
     "ASK-1",
     "ASK-2",
@@ -37,6 +38,7 @@ RULE_IDS = (
     "GUARD-1",
     "GUARD-2",
     "RUN-1",
+    "PROD-1",
 )
 
 # The reason an unattended run gets in place of a prompt nobody would answer (RUN-1). It is read
@@ -46,6 +48,14 @@ UNATTENDED_HELD = (
     "the go-ahead now and the call is refused. Nothing keeps it for later: do not retry it or work "
     "around it, carry on with the next step, and list it under held calls in the run report so a "
     "person can run it"
+)
+
+# The reason agent mode gives in place of a prompt (AGENT-1). Agent mode never waits on a person,
+# so the asks it keeps (KEPT_ASKS) are refused, and the reason says who can do it.
+AGENT_HELD = (
+    "agent mode never waits on a person, so this call is refused instead of asked. Do not retry "
+    "it or work around it: carry on with the next step and list it as a held call. A person can "
+    "run it, or start a session with AGENTIC_SDLC_MODE=confirm to be asked"
 )
 
 TRUFFLEHOG_FOUND = 183  # TruffleHog's exit code for results with --fail
@@ -62,11 +72,9 @@ GATED_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Files whose edit changes what the guard does (GUARD-2), matched on the path's tail.
-GUARD_CONFIG_RE = re.compile(
-    r"(^|/)(\.agentic-sdlc\.json|\.pre-commit-config\.yaml|\.claude/settings(\.local)?\.json"
-    r"|\.git/hooks/[^/]+|hooks/hooks\.json)$"
-)
+
+# A path a Codex patch adds, updates, deletes or moves to.
+PATCH_PATH_RE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+?)\s*$", re.M)
 
 # Programs an untraced command may be made of and still pass TRACE-2: they only read or print.
 # Anything else the parser cannot trace is unknown, and unknown means suspicious.
@@ -338,6 +346,14 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             add(
                 "deny", "GUARD-1", "a -c override of hooks, includes or aliases on the command line"
             )
+        moved = sorted(n for n in facts.sets_variables if command_mod.sets_git_config(n))
+        if moved:
+            add(
+                "deny",
+                "GUARD-1",
+                f"{', '.join(moved)} sets git configuration through the environment, where a "
+                "hooks path override cannot be read; set the key with git -c instead",
+            )
         if config_mod.UNATTENDED_ENV in facts.sets_variables:
             # The agent's own decision: recorded, never asked about or refused.
             add(
@@ -345,9 +361,8 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                 "RUN-4",
                 f"the command sets {config_mod.UNATTENDED_ENV} and starts an unattended run",
             )
-        if facts.kind == "read" and facts.reads_secret_file:
-            names = ", ".join(facts.reads_secret_file[:3])
-            add("ask", "SECRET-3", f"{names} holds credentials by name")
+        if facts.starts_run:
+            add("allow", "RUN-4", "agentic-sdlc run starts an unattended run")
         if facts.is_push and not facts.dry_run:
             protected = set(cfg.protected_branches)
             hit = [t for t in facts.targets if t in protected or t == "*"]
@@ -368,6 +383,46 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
                     "every workflow triggered on tag pushes runs again at the moved tag, and release assets may be rebuilt",
                 )
 
+    scan = scan_shell(command)
+    checked = [(facts, command) for facts in parsed.commands]
+    checked += [(f, command) for body in scan.bodies for f in command_mod.parse(body, cwd).commands]
+    for facts in parsed.commands:
+        if facts.script:  # a shell script with uncommitted changes, read one level deep
+            bodies = [facts.script, *scan_shell(facts.script).bodies]
+            checked += [
+                (f, facts.script)
+                for b in bodies
+                for f in command_mod.parse(b, facts.workdir).commands
+            ]
+    for facts, source in checked:
+        if facts.reads_secret_file:
+            names = ", ".join(facts.reads_secret_file[:3])
+            add("ask", "SECRET-3", f"{names} holds credentials by name")
+        if facts.prints_secret:
+            add("ask", "SECRET-2", facts.prints_secret)
+        else:
+            for name in facts.printed_variables:
+                found = text.secret_findings(command_mod.environment_value(name))
+                if found:
+                    add(
+                        "ask",
+                        "SECRET-2",
+                        f"{facts.program} ${name} prints a value shaped like a {found[0].name}",
+                    )
+                    break
+        if facts.writes_guard_config:
+            names = ", ".join(facts.writes_guard_config[:3])
+            add(
+                "ask",
+                "GUARD-2",
+                f"the command changes {names}, which changes what the guard does; a shell write "
+                "counts as an edit",
+            )
+        why, statements = command_mod.database_write(facts.tokens, cfg.production_clients)
+        where = production_target(source, facts.program, statements, cfg) if why else ""
+        if where:
+            add("ask", "PROD-1", f"{facts.program} reaches production ({where}) and {why}")
+
     carried = command_mod.carried_text(parsed, cwd)
     if carried:
         for finding in text.attribution_findings(carried, cfg):
@@ -383,7 +438,6 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
             for finding in staged_secret_findings(where, cfg):
                 add("deny", "SECRET-1", f"{finding.name} at staged line {finding.line}")
 
-    scan = scan_shell(command)
     if any(_runs_gated(body) for body in scan.bodies):
         add(
             "ask",
@@ -471,6 +525,28 @@ def decide(command: str, cwd: Path | None = None, cfg: config_mod.Config | None 
     return decision
 
 
+def production_target(
+    source: str, program: str, statements: list[str], cfg: config_mod.Config
+) -> str:
+    """Where a database client call shows a production marker (PROD-1), or an empty string.
+    The command text counts without its statements, so a table named prod_orders is no target,
+    and a host set by an earlier export in the same command counts. A variable the command
+    uses, and the variables the client takes its host from, count by their value in the hook's
+    environment; the reason names the variable, never its value."""
+    markers = cfg.production_markers
+    for statement in statements:
+        source = source.replace(statement, " ")
+    if any(pattern.search(source) for pattern in markers):
+        return "the command names it"
+    names = [m.group(1) for m in command_mod.VAR_REF_RE.finditer(source)]
+    names += command_mod.CLIENT_TARGET_ENV.get(program, ())
+    for name in dict.fromkeys(names):
+        value = command_mod.environment_value(name)
+        if value and any(pattern.search(value) for pattern in markers):
+            return f"${name} points there"
+    return ""
+
+
 def agent_branch_push(facts: command_mod.Facts, cfg: config_mod.Config) -> bool:
     """True when an unattended run may push this without a go-ahead (RUN-1): every target is a
     named branch that matches unattended.push_branches and is not protected, with no force, no
@@ -489,29 +565,41 @@ def agent_branch_push(facts: command_mod.Facts, cfg: config_mod.Config) -> bool:
 
 
 # Asks a person answers in agent mode too. An edit to the guard's own configuration can switch
-# every refusal off (empty the protected branches, drop the secret scan or the hook), and a read
-# of a secret-named file puts the secret into the transcript.
-KEPT_ASKS = frozenset({"GUARD-2", "SECRET-3"})
+# every refusal off (empty the protected branches, drop the secret scan or the hook), a read of
+# a secret-named file or a print of the environment puts a secret into the transcript, and a
+# write to production is what PROD-1 exists to stop.
+KEPT_ASKS = frozenset({"GUARD-2", "SECRET-2", "SECRET-3", "PROD-1"})
 
 
 def apply_mode(
     decision: Decision, cfg: config_mod.Config, titles: dict[str, str], fixes: dict[str, str]
 ) -> None:
-    """Settle who answers an ask. In agent mode, the default, the agent decides: the call is
-    allowed and AGENT-1 is recorded beside the rule that asked, except for KEPT_ASKS, which a
-    person answers. In confirm mode a person answers every ask. In an unattended run nobody can,
-    so an ask a person would answer is refused (RUN-1). A refusal stays a refusal."""
+    """Settle who answers an ask. In agent mode, the default, nothing asks: the agent decides,
+    so the call is allowed and AGENT-1 is recorded beside the rule that asked, except for
+    KEPT_ASKS, which are refused (AGENT-1, or RUN-1 in an unattended run). In confirm mode a
+    person answers every ask. In an unattended run nobody can, so an ask a person would answer
+    is refused (RUN-1). A refusal stays a refusal."""
     if decision.permission != "ask":
         return
     if cfg.agent_decides and not KEPT_ASKS.isdisjoint(decision.rules):
         if config_mod.unattended_from_env():
             hold_for_unattended(decision, titles, fixes)
+        else:
+            hold_in_agent_mode(decision, titles)
     elif cfg.agent_decides:
         decision.permission = "allow"
         title = titles.get("AGENT-1", "AGENT-1")
         decision.add("allow", "AGENT-1", f"{title}: recorded, not asked")
     elif cfg.unattended:
         hold_for_unattended(decision, titles, fixes)
+
+
+def hold_in_agent_mode(decision: Decision, titles: dict[str, str]) -> None:
+    """Agent mode never waits on a person. A kept ask (a secret read or print, an edit of the
+    guard's configuration, a production write) is refused, and AGENT-1 records it (AGENT-1)."""
+    if decision.permission == "ask":
+        title = titles.get("AGENT-1", "AGENT-1")
+        decision.add("deny", "AGENT-1", f"{title}: {AGENT_HELD}")
 
 
 def hold_for_unattended(decision: Decision, titles: dict[str, str], fixes: dict[str, str]) -> None:
@@ -526,29 +614,47 @@ def decide_file(
     tool: str, path: str, cwd: Path | None = None, cfg: config_mod.Config | None = None
 ) -> Decision:
     """Decisions for the file tools: a secret file read (SECRET-3) and an edit of the guard's
-    own configuration (GUARD-2) ask; everything else is allowed."""
+    own configuration (GUARD-2) ask in confirm mode and are refused in agent mode; everything
+    else is allowed."""
+    return decide_files(tool, [path] if path else [], cwd, cfg)
+
+
+def patch_paths(patch: str) -> list[str]:
+    """The files a Codex patch adds, updates, deletes or moves to, in patch order."""
+    return list(dict.fromkeys(PATCH_PATH_RE.findall(patch)))
+
+
+def decide_patch(
+    patch: str, cwd: Path | None = None, cfg: config_mod.Config | None = None
+) -> Decision:
+    """A Codex patch is an edit of every file it names, so GUARD-2 applies to each."""
+    return decide_files("Edit", patch_paths(patch), cwd, cfg)
+
+
+def decide_files(
+    tool: str, paths: list[str], cwd: Path | None = None, cfg: config_mod.Config | None = None
+) -> Decision:
     cfg = cfg or config_mod.Config()
     titles = registry.titles()
     fixes = registry.fixes()
     decision = Decision()
-    if not path:
-        return decision
     reads = tool in ("Read", "Grep")
     writes = tool in ("Edit", "Write", "MultiEdit", "NotebookEdit")
-    if reads and command_mod.is_secret_file(path):
-        decision.add(
-            "ask",
-            "SECRET-3",
-            f"{titles.get('SECRET-3', 'SECRET-3')}: {path} holds credentials by name",
-            fixes.get("SECRET-3", ""),
-        )
-    if writes and GUARD_CONFIG_RE.search(path.replace("\\", "/")):
-        decision.add(
-            "ask",
-            "GUARD-2",
-            f"{titles.get('GUARD-2', 'GUARD-2')}: {path} changes what the guard does",
-            fixes.get("GUARD-2", ""),
-        )
+    for path in paths:
+        if reads and command_mod.is_secret_file(path):
+            decision.add(
+                "ask",
+                "SECRET-3",
+                f"{titles.get('SECRET-3', 'SECRET-3')}: {path} holds credentials by name",
+                fixes.get("SECRET-3", ""),
+            )
+        if writes and command_mod.is_guard_config(path):
+            decision.add(
+                "ask",
+                "GUARD-2",
+                f"{titles.get('GUARD-2', 'GUARD-2')}: {path} changes what the guard does",
+                fixes.get("GUARD-2", ""),
+            )
     apply_mode(decision, cfg, titles, fixes)
     return decision
 

@@ -40,6 +40,6 @@ runs on at least one new condition (REVIEW-4).
 
 | Mechanism | Where |
 |---|---|
-| Claude Code hook | the agentic-sdlc plugin; settings in `.agentic-sdlc.json` |
+| Agent hook | the agentic-sdlc plugin in Claude Code and in Codex; settings in `.agentic-sdlc.json` |
 | Pull request or merge request text check | `.github/workflows/conventions.yml` calling `anivar/agentic-sdlc` at a pinned tag, or the `conventions` job in `.gitlab-ci.yml` |
 | Branch rules | the ruleset imported from `rulesets/main-protected.json` |

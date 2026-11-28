@@ -10,3 +10,5 @@ build/
 .agentic-sdlc-forbidden.txt
 .DS_Store
 evals/results/
+.ci-home/
+codex-prompt.json

@@ -1,8 +1,8 @@
 {
   "name": "agentic-sdlc",
   "displayName": "Agentic SDLC",
-  "version": "2.0.1",
-  "description": "Skills for a delivery process run with coding agents (evidence-tagged claims, plans with gates, reviewable slices, test-first, reviews in Conventional Comments) plus a PreToolUse hook that refuses tool attribution, bulk staging, force-pushes to protected branches and key-shaped literals. In agent mode, the default, commits, pushes and posts run and are recorded; a credential read or an edit of the guard's configuration still asks. Confirm mode asks before every commit, push and post.",
+  "version": "2.1.0",
+  "description": "Skills for a delivery process run with coding agents (evidence-tagged claims, plans with gates, reviewable slices, test-first, reviews in Conventional Comments) plus a PreToolUse hook that refuses tool attribution, bulk staging, force-pushes to protected branches and key-shaped literals. In agent mode, the default, nothing asks: commits, pushes and posts run and are recorded, and a credential read or print, a change to the guard's configuration and a production database write are refused. Confirm mode asks before every commit, push and post. The hook runs in Claude Code and in Codex.",
   "author": {
     "name": "Anivar Aravind",
     "url": "https://anivar.net"

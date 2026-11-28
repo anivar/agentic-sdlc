@@ -1,6 +1,6 @@
 # The agent decides, and the guard records
 
-Status: proposed · Date: 2026-11-23 · Decides: the maintainer · Extends: [ADR 0005](0005-a-blocking-error-where-no-prompt-is-possible.md), [ADR 0007](0007-an-unattended-run-never-waits-on-a-person.md)
+Status: proposed; the kept-asks clause is superseded by [ADR 0009](0009-agent-mode-never-asks.md) · Date: 2026-11-23 · Decides: the maintainer · Extends: [ADR 0005](0005-a-blocking-error-where-no-prompt-is-possible.md), [ADR 0007](0007-an-unattended-run-never-waits-on-a-person.md)
 
 This breaks existing behaviour. In 1.x the guard answers a commit, a push, a forge post, a read
 of a secret-named file, an edit of its own configuration and an untraced gated command with

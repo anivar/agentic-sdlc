@@ -23,8 +23,9 @@ file is about changing the product.
    `tests/test_operability.py` when it changes the hook contract.
 3. The hook stays standard-library Python that runs on 3.9. No dependency is added to the
    runtime path. `tests/` run on 3.9 and 3.14 in CI and on the stock macOS interpreter.
-4. `command.py` parses; `guard.py` decides; `text.py` matches; `hook.py` and `cli.py` adapt.
-   A new mechanism goes into those modules, not into the adapters.
+4. `command.py` parses; `guard.py` decides; `text.py` matches; `hook.py` and `cli.py` adapt;
+   `runs.py` launches and supervises runs and decides nothing. A new mechanism goes into the
+   first three modules, not into the adapters or the launcher.
 5. `docs/coverage.md` is generated. Run `agentic-sdlc coverage` after a registry change; CI
    fails when it is stale.
 6. Every `skills/*/SKILL.md` cites existing rule ids, lists in `metadata.rules` exactly the ids its

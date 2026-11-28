@@ -42,11 +42,11 @@
       ],
       "decision": "deny",
       "owner": "plain-voice",
-      "opt_in": true,
       "since": "1.0.0",
       "status": "active",
+      "fix": "Reword without the vendor name, or switch attribution.mode back to patterns for this repository.",
       "notes": "Off by default so a repository can say which tools it supports in its own history.",
-      "fix": "Reword without the vendor name, or switch attribution.mode back to patterns for this repository."
+      "opt_in": true
     },
     {
       "id": "STAGE-1",
@@ -1080,24 +1080,61 @@
     {
       "id": "SECRET-2",
       "title": "Never print a secret",
-      "statement": "A secret MUST never be printed. Give the variable name, file:line, length or hash. Token-bearing lines are excluded before a log is summarised, and a masking regex is never trusted.",
+      "statement": "A secret MUST never be printed. Give the variable name, file:line, length or hash. Token-bearing lines are excluded before a log is summarised, and a masking regex is never trusted. A command that prints the whole environment (env or printenv with no command or name, export or declare -p with no names, set with no arguments), or prints through printenv, echo or printf a variable whose name marks a credential (a TOKEN, SECRET, PASSWORD, PASS, KEY, PAT, DSN or COOKIE part) or whose value in the hook's environment is shaped like a key, MUST be confirmed by the user in confirm mode and MUST be refused in agent mode (AGENT-1). ${#NAME}, the length, prints no secret.",
       "mechanisms": [
+        "hook",
         "skill"
       ],
+      "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Print the variable's name and its length (${#NAME}) or a hash instead; a person prints the value if the work needs it.",
+      "examples": {
+        "ask": [
+          "env",
+          "env | sort",
+          "printenv",
+          "printenv GITLAB_TOKEN",
+          "echo \"$GITLAB_TOKEN\"",
+          "export -p",
+          "set"
+        ],
+        "allow": [
+          "env FOO=1 make test",
+          "printenv PATH",
+          "echo \"${#GITLAB_TOKEN}\"",
+          "echo \"$HOME\""
+        ]
+      }
     },
     {
       "id": "PROD-1",
       "title": "Production is read-only",
-      "statement": "Production systems and data MUST be treated as read-only unless the decider says otherwise for that specific action.",
+      "statement": "Production systems and data MUST be treated as read-only unless the decider says otherwise for that specific action. A database client call (psql, pg_restore, mysql, mariadb, sqlcmd, mongosh, redis-cli, cqlsh, clickhouse) whose target carries a production marker (production.markers; prod and production as words by default): the command text without its statements, the value of a variable it uses, or the host the client takes from its environment (PGHOST, MYSQL_HOST) MUST be confirmed by the user in confirm mode, and MUST be refused in agent mode (AGENT-1), when its statements write data, schema or grants, or come from a file, stdin or an interactive session the hook cannot read. Read statements pass. A target with no marker, or set in a shell profile the hook does not share, is not seen, so the credential is the boundary: production credentials given to an agent MUST be read-only.",
       "mechanisms": [
+        "hook",
         "skill"
       ],
+      "decision": "ask",
       "owner": "thin-slices",
       "since": "1.0.0",
-      "status": "active"
+      "status": "active",
+      "fix": "Run the write against staging, or run a read statement; a person runs the production write, or a session in confirm mode asks for it.",
+      "examples": {
+        "ask": [
+          "psql \"$PROD_URL\" -c \"delete from orders where id = 1\"",
+          "cat fix.sql | psql \"$PROD_URL\"",
+          "mysql -h orders-production -e \"update users set role = 1\"",
+          "redis-cli -h cache-prod FLUSHALL"
+        ],
+        "allow": [
+          "psql \"$PROD_URL\" -c \"select count(*) from orders\"",
+          "psql \"$STAGING_URL\" -c \"delete from orders\"",
+          "redis-cli -h cache-prod GET session:1",
+          "psql local -c \"delete from prod_orders\""
+        ]
+      }
     },
     {
       "id": "DESIGN-1",
@@ -1162,7 +1199,7 @@
     {
       "id": "SETUP-1",
       "title": "One block in the repository's agent file",
-      "statement": "The repository's AGENTS.md or CLAUDE.md MUST carry one \"Rules that bind\" block that points at docs/agents/ and .agentic-sdlc.json. The file that exists is edited; a second one is never created beside it. When neither file exists, the decider is asked which one to create; the skill never picks.",
+      "statement": "The repository's AGENTS.md MUST carry one \"Rules that bind\" block that points at docs/agents/ and .agentic-sdlc.json, because Codex and most agents read AGENTS.md. A CLAUDE.md MUST import it with an @AGENTS.md line, never a second copy of the block, so Claude Code reads the same rules. A block found only in CLAUDE.md is moved to AGENTS.md when the decider says yes; until then it stays where it is.",
       "mechanisms": [
         "skill"
       ],
@@ -1247,12 +1284,12 @@
         "hook",
         "skill"
       ],
+      "decision": "deny",
       "owner": "unattended-runs",
       "since": "2.0.0",
       "status": "active",
-      "decision": "deny",
-      "opt_in": true,
       "fix": "Carry on with the next step, and list the refused call under held calls in the run report so a person can run it.",
+      "notes": "Opt-in through the environment of the Claude Code process; .agentic-sdlc.json cannot set it. The examples run with AGENTIC_SDLC_UNATTENDED=1 on branch agent/work with unattended.push_branches set to [\"agent/*\"].",
       "examples_unattended": {
         "allow": [
           "git commit -m \"Add the parser\"",
@@ -1271,7 +1308,7 @@
           "cat .env"
         ]
       },
-      "notes": "Opt-in through the environment of the Claude Code process; .agentic-sdlc.json cannot set it. The examples run with AGENTIC_SDLC_UNATTENDED=1 on branch agent/work with unattended.push_branches set to [\"agent/*\"]."
+      "opt_in": true
     },
     {
       "id": "RUN-2",
@@ -1298,11 +1335,12 @@
     {
       "id": "RUN-4",
       "title": "An agent may start an unattended run, and the start is recorded",
-      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, is neither asked about nor refused, and the guard MUST record the start under RUN-4 in the decision record, whatever record.decisions says. In the run it starts, RUN-1 holds.",
+      "statement": "An agent MAY start an unattended run on its own decision. A command that sets AGENTIC_SDLC_UNATTENDED, as a leading assignment, an env argument or a name given to export, declare, typeset, readonly or local, and agentic-sdlc run, which sets it for the run it starts, are neither asked about nor refused, and the guard MUST record the start under RUN-4 in the decision record, whatever record.decisions says. In the run it starts, RUN-1 holds.",
       "mechanisms": [
         "hook",
         "skill"
       ],
+      "decision": "record",
       "owner": "unattended-runs",
       "since": "2.0.0",
       "status": "active",
@@ -1313,15 +1351,16 @@
           "env AGENTIC_SDLC_UNATTENDED=1 claude -p x",
           "export AGENTIC_SDLC_UNATTENDED=1",
           "rg -n AGENTIC_SDLC_UNATTENDED src",
-          "unset AGENTIC_SDLC_UNATTENDED"
+          "unset AGENTIC_SDLC_UNATTENDED",
+          "agentic-sdlc run fix-parser \"Fix the parser; done when just check passes\"",
+          "agentic-sdlc runs"
         ]
       },
       "examples_unattended": {
         "allow": [
           "AGENTIC_SDLC_UNATTENDED=1 claude -p x"
         ]
-      },
-      "decision": "record"
+      }
     },
     {
       "id": "HANDOFF-1",
@@ -1381,7 +1420,7 @@
     {
       "id": "GUARD-1",
       "title": "Hook bypass flags are refused",
-      "statement": "An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, and git config setting core.hooksPath or include.path are refused.",
+      "statement": "An agent MUST NOT skip the repository's hooks: git commit or git push with --no-verify (or commit -n), git -c core.hooksPath=…, include.path=… or an alias override on the command line, git config setting core.hooksPath or include.path, and git configuration set through the environment (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT with its GIT_CONFIG_KEY_ and GIT_CONFIG_VALUE_ pairs, GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM) are refused.",
       "mechanisms": [
         "hook",
         "skill"
@@ -1398,21 +1437,24 @@
           "git push --no-verify origin feature",
           "git -c core.hooksPath=/dev/null commit -m \"x\"",
           "git config core.hooksPath /tmp/x",
-          "git config --global core.hooksPath /tmp/x"
+          "git config --global core.hooksPath /tmp/x",
+          "GIT_CONFIG_PARAMETERS=\"'core.hookspath'='/dev/null'\" git commit -m x",
+          "export GIT_CONFIG_GLOBAL=/tmp/no-hooks.gitconfig"
         ],
         "ask": [
           "git commit -m \"x\""
         ],
         "allow": [
           "git config --get core.hooksPath",
-          "git config user.name Someone"
+          "git config user.name Someone",
+          "GIT_AUTHOR_DATE=2026-11-25T00:00:00 git log -1"
         ]
       }
     },
     {
       "id": "GUARD-2",
       "title": "The guard's own configuration is changed knowingly",
-      "statement": "An agent's edit to .agentic-sdlc.json, a git hook, .claude/settings.json, .claude/settings.local.json or .pre-commit-config.yaml MUST be confirmed by the user before it is written.",
+      "statement": "An agent's change to .agentic-sdlc.json, a git hook or the .git/hooks directory, a git configuration file (.git/config, ~/.gitconfig, ~/.config/git/config), .claude/settings.json, .claude/settings.local.json, a Codex hook or configuration file (.codex/hooks.json, .codex/config.toml), a plugin's hooks/hooks.json or .pre-commit-config.yaml MUST be confirmed by the user before it is written in confirm mode, and MUST be refused in agent mode (AGENT-1). A change counts through every tool: the file tools, a Codex patch, and the shell (a redirection, tee, sed -i, cp, mv, rm, chmod, dd, inline interpreter code that names the file and writes, and a script with uncommitted changes that an interpreter runs). Code that only reads the file passes.",
       "mechanisms": [
         "hook",
         "skill"
@@ -1421,12 +1463,28 @@
       "owner": "setup-conventions",
       "since": "1.0.0",
       "status": "active",
-      "fix": "Say what the edit changes in the guard and why; write it when the user says yes."
+      "fix": "Say what the edit changes in the guard and why; a person makes the edit, or a session in confirm mode asks for it.",
+      "examples": {
+        "ask": [
+          "echo '{}' > .agentic-sdlc.json",
+          "sed -i '' 's/agent/confirm/' .agentic-sdlc.json",
+          "python3 -c \"open('.agentic-sdlc.json','w').write('{}')\"",
+          "rm .git/hooks/pre-commit",
+          "printf '[core]\\n\\thooksPath = /dev/null\\n' >> .git/config"
+        ],
+        "allow": [
+          "cat .agentic-sdlc.json",
+          "jq . .agentic-sdlc.json",
+          "git diff .claude/settings.json",
+          "cp .agentic-sdlc.json /tmp/guard-copy.json",
+          "python3 -c \"import json; print(json.load(open('.agentic-sdlc.json')))\""
+        ]
+      }
     },
     {
       "id": "AGENT-1",
-      "title": "The agent decides; the guard records what it would have asked",
-      "statement": "In agent mode, the default, a call that a rule other than GUARD-2 or SECRET-3 would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A GUARD-2 or SECRET-3 ask MUST still go to a person, and MUST be refused under RUN-1 when the launcher set AGENTIC_SDLC_UNATTENDED, because an edit of the guard's configuration can switch the refusals off. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
+      "title": "The agent decides, the guard never asks, and the record keeps the rule",
+      "statement": "In agent mode, the default, the guard MUST NOT ask. A call that a rule other than GUARD-2, SECRET-2, SECRET-3 or PROD-1 would ask about MUST be allowed and recorded with that rule and AGENT-1 in the decision record, whatever record.decisions says: the agent decides, under its own instructions. A GUARD-2, SECRET-2, SECRET-3 or PROD-1 ask MUST be refused and recorded with AGENT-1, or refused under RUN-1 when the launcher set AGENTIC_SDLC_UNATTENDED, because a change to the guard's configuration can switch the refusals off, a secret read or print puts the secret into the transcript, and a production write is what PROD-1 stops. A gated command the guard could not analyse MUST be refused. A rule that refuses MUST still refuse. In confirm mode (\"mode\": \"confirm\" in .agentic-sdlc.json, or AGENTIC_SDLC_MODE=confirm) a person answers every ask.",
       "mechanisms": [
         "hook"
       ],
@@ -1434,7 +1492,7 @@
       "owner": "setup-conventions",
       "since": "2.0.0",
       "status": "active",
-      "fix": "Nothing to fix: the call runs and the decision record shows which rule would have asked. Set confirm mode where a person must answer.",
+      "fix": "Nothing to fix for a call that ran: the decision record shows which rule would have asked. For a refused secret read or print, guard edit or production write, a person does it, or starts a session with AGENTIC_SDLC_MODE=confirm to be asked.",
       "notes": "The rule examples elsewhere in this registry state what each rule decides in confirm mode; agent mode then turns each ask into a recorded allow.",
       "examples_agent": {
         "allow": [
@@ -1442,20 +1500,20 @@
           "git push origin main",
           "gh pr create --title \"Add it\" --body \"Adds it.\""
         ],
-        "ask": [
-          "cat .env"
-        ],
         "deny": [
           "git add -A",
           "git commit --no-verify -m \"x\"",
-          "git push --force origin main"
+          "git push --force origin main",
+          "cat .env",
+          "env",
+          "psql \"$PROD_URL\" -c \"drop table orders\""
         ]
       }
     },
     {
       "id": "SECRET-3",
-      "title": "Reading a secret file asks",
-      "statement": "Reading, grepping, copying or sending a file that by name holds credentials (.env files, private keys, .netrc, .npmrc, .pypirc, credentials.json, PEM and keystore files) MUST be confirmed by the user before it happens.",
+      "title": "A secret file is read only on a person's go-ahead",
+      "statement": "Reading, grepping, copying, archiving or sending a file that by name holds credentials (.env files, private keys, .netrc, .npmrc, .pypirc, credentials.json, PEM and keystore files) MUST be confirmed by the user before it happens in confirm mode, and MUST be refused in agent mode (AGENT-1). A read counts through the file tools, a program that reads or sends its file operands, an input redirection, a command substitution, inline interpreter code that names the file, and a script with uncommitted changes that an interpreter runs; a committed script is reviewed code and is not opened.",
       "mechanisms": [
         "hook",
         "skill"
@@ -1464,18 +1522,24 @@
       "owner": "thin-slices",
       "since": "1.0.0",
       "status": "active",
-      "fix": "Name the variable or the file and its length or hash instead; read the file only when the user says yes.",
+      "fix": "Name the variable or the file and its length or hash instead. If the work needs the file, a person reads it, or a session in confirm mode asks for it.",
       "examples": {
         "ask": [
           "cat .env",
           "head -c 40 ~/.ssh/id_ed25519",
-          "cp .env.production /tmp/x"
+          "cp .env.production /tmp/x",
+          "python3 -c \"print(open('.env').read())\"",
+          "grep -n KEY .env",
+          "cat < .env",
+          "echo \"$(cat .env)\""
         ],
         "allow": [
           "cat README.md",
           "head -n 5 src/main.py",
           "cp .env.example .env.local.example",
-          "cp .env.example .env"
+          "cp .env.example .env",
+          "grep -n KEY .env.example",
+          "python3 -c \"print(1)\""
         ]
       }
     }
