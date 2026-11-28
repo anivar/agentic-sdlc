@@ -70,8 +70,7 @@
   `agent/*` branches.
 - The wheel and the source distribution carry `LICENSE` and `NOTICE`, and the package metadata
   states the licence as an SPDX expression.
-- The install lines in the README fetch the package from this repository, since the package is
-  not on PyPI.
+- The install lines in the README fetch the package from this repository, its only source.
 - `SECURITY.md` states what the hook reads (an uncommitted script an interpreter runs, the
   value of a variable a command uses, the file names in a Codex patch) and what the run
   launcher starts and writes.
@@ -83,6 +82,11 @@
   linear time to the same tokens: 1 MB in under half a second.
 - `SECURITY.md` states that AGENT-1 and RUN-4 decisions are always recorded, as `record.py`
   does.
+
+### Removed
+
+- The PyPI release path: the `pypi` job in `release.yml` and the publish step in `just release`.
+  A version tag creates the GitHub release, and the package installs from this repository.
 
 ### Not verified
 

@@ -58,11 +58,10 @@ guard cmd:
 hook-try cmd:
     printf '%s' '{"tool_name":"Bash","tool_input":{"command":{{cmd}}},"cwd":"{{justfile_directory()}}"}' | python3 src/agentic_sdlc/hook.py; echo " (exit $?)"
 
-# Build the distribution. The normal publish path is the signed tag: release.yml publishes
-# with trusted publishing, no token. With UV_PUBLISH_TOKEN set, this publishes directly.
+# Build the distribution into dist/. Releasing is the signed tag: release.yml writes the
+# GitHub release from the changelog section.
 release:
     uv build
-    if [ -n "${UV_PUBLISH_TOKEN:-}" ]; then uv publish; else echo "dist/ is built; push a signed v* tag and the release workflow publishes to PyPI"; fi
 
 # Load the plugin into a throwaway Codex home and check that Codex sees every skill.
 codex-check:

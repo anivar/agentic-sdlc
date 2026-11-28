@@ -372,9 +372,8 @@ trusted once in an interactive session first.
 ## Try the hook by hand
 
 The package is `agentic-sdlc-guard` and the command it installs is `agentic-sdlc`. Install it from
-this repository: the package is not on PyPI, and the PyPI project named `agentic-sdlc` is a
-different project, so never run `uvx agentic-sdlc`. The URL below gives the head of `main`; add
-`@<tag>` to it for a release tag:
+this repository, which is its only source: `uvx agentic-sdlc` with no source does not run this
+project. The URL below gives the head of `main`; add `@<tag>` to it for a release tag:
 
 ```bash
 alias agentic-sdlc='uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc'
