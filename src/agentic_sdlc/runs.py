@@ -37,6 +37,8 @@ from pathlib import Path
 
 from agentic_sdlc import config as config_mod
 
+# The supervisor needs POSIX sessions, process groups and file locks: macOS and Linux.
+POSIX = os.name == "posix"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 SETTLED = {"done", "failed", "timed-out", "stopped", "lost"}
 STOP_GRACE_SECONDS = 10.0
@@ -91,9 +93,14 @@ def agent_command(agent: str, prompt: str, budget: float) -> list[str]:
 def plan(
     name: str, task: str, agent: str, budget: float, hours: float, base: str, cwd: Path
 ) -> dict:
-    """The run record before anything is created. Refuses a bad name, a name in use, a branch
-    or worktree path that exists, a task too long for a command line, and an agent that is not
-    on PATH."""
+    """The run record before anything is created. Refuses a system without POSIX processes, a
+    bad name, a name in use, a branch or worktree path that exists, a task too long for a
+    command line, and an agent that is not on PATH."""
+    if not POSIX:
+        raise RunError(
+            "agentic-sdlc run needs macOS or Linux: it uses POSIX sessions, process groups "
+            "and file locks"
+        )
     if not NAME_RE.match(name):
         raise RunError(f"run name {name!r} must match {NAME_RE.pattern}")
     if not task.strip():

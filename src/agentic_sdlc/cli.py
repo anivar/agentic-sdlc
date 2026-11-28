@@ -9,6 +9,8 @@ agentic-sdlc validate                     the registry and the repository config
 agentic-sdlc coverage [--check]           docs/coverage.md and the wheel's registry copy
 agentic-sdlc hooks install|status|uninstall native git hooks for any agent
 agentic-sdlc log [--last N] [--summary]   the decisions the hook recorded here
+agentic-sdlc run <name> "<task>"          start a long-running run on the branch agent/<name>
+agentic-sdlc runs [read|wait|stop <name>] list the runs, or read, wait for or stop one
 agentic-sdlc check-mr [--strict]          GitLab CI: title, description and commits of the MR
 agentic-sdlc bench                        how long a decision takes
 """

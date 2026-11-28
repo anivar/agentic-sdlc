@@ -11,9 +11,11 @@
   logs live under the git common directory. The guard records each start under RUN-4. Ending a
   run ends the agent's whole process group, and a run whose supervisor is killed shows as
   orphaned until `runs stop` ends it.
-- `just codex-check` loads the plugin into a throwaway Codex home and checks that Codex sees
-  every skill. The home sits under the user cache folder: a home inside the repository made
-  Codex copy the repository into itself.
+- `just codex-check` and the `codex` job in CI load the plugin into a throwaway Codex home and
+  check that Codex sees every skill. The home sits under the user cache folder: a home inside
+  the repository made Codex copy the repository into itself.
+- `agentic-sdlc run` refuses to start on a system without POSIX sessions, process groups and
+  file locks, with a message that names macOS and Linux.
 
 ### Changed
 
@@ -66,6 +68,13 @@
   mode refuses an edit of `.agentic-sdlc.json`.
 - The setup asset `.agentic-sdlc.json` names agent mode and lets an unattended run push to
   `agent/*` branches.
+- The wheel and the source distribution carry `LICENSE` and `NOTICE`, and the package metadata
+  states the licence as an SPDX expression.
+- The install lines in the README fetch the package from this repository, since the package is
+  not on PyPI.
+- `SECURITY.md` states what the hook reads (an uncommitted script an interpreter runs, the
+  value of a variable a command uses, the file names in a Codex patch) and what the run
+  launcher starts and writes.
 
 ### Fixed
 
@@ -79,6 +88,8 @@
 
 - A live Codex session with the hooks trusted: the tool name Codex sends for a shell call, and
   that a deny stops the call. `docs/verification.md` has the procedure.
+- The `codex` job on a GitHub runner. The same steps pass locally as `just codex-check` with
+  Codex 0.172.0.
 
 ## 2.0.1 (2026-11-24)
 

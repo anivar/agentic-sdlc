@@ -9,7 +9,7 @@ description: >
   Triggers on: "implement the next step", "land this", "next step from the plan", "ship this
   slice", "ready to commit", "open a PR", "is it ready to merge", "what should I stage".
 license: MIT
-compatibility: Any git repository; the hook side needs the agentic-sdlc plugin in Claude Code.
+compatibility: Any git repository; the hook side needs the agentic-sdlc plugin in Claude Code or Codex.
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net

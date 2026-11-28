@@ -59,6 +59,17 @@ def test_a_run_name_is_short_lower_case_and_unused(repo: Path, agents: Path):
         runs.plan("note", "task", "claude", 5, 1, "HEAD", repo)
 
 
+def test_a_system_without_posix_processes_is_refused_before_anything_is_created(
+    repo: Path, agents: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(runs, "POSIX", False)
+    with pytest.raises(runs.RunError, match="macOS or Linux"):
+        runs.plan("note", "task", "claude", 5, 1, "HEAD", repo)
+    assert cli.main(["run", "note", "task", "--cwd", str(repo)]) == 2
+    assert not (repo.parent / "repo.note").exists()
+    assert runs.load_all(repo) == []
+
+
 def test_a_dry_run_shows_a_launch_with_nothing_that_can_prompt(repo: Path, agents: Path):
     claude = runs.plan("one", "task", "claude", 7.5, 1, "HEAD", repo)["command"]
     assert claude[:2] == ["claude", "-p"]

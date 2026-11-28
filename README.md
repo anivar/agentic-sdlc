@@ -74,7 +74,7 @@ upload is not a supported path.
 **Every agent and every person**, the git hooks, from inside a repository:
 
 ```bash
-uvx --from agentic-sdlc-guard agentic-sdlc hooks install
+uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc hooks install
 ```
 
 This copies the package under `.git/` and writes `commit-msg` (ATTR-1, ATTR-2), `pre-commit`
@@ -151,7 +151,7 @@ SECRET-3, GUARD-2 and PROD-1, which are refused; a call marked **denied** is sti
 | SECRET-3 | reading, grepping, copying, archiving or sending a file that holds credentials by name (`.env` files, private keys, `.netrc`, `.npmrc`, `credentials.json`, PEM and keystore files), through a program's operands, an input redirection, a command substitution, inline interpreter code (`python3 -c`, `node -e`, `ruby -e`), or a script with uncommitted changes that an interpreter runs (`python3 read.py`, `bash fix.sh`); a committed script is not opened: **asks**; **denied** in agent mode | hook, on Bash, Read and Grep |
 | SECRET-2 | printing the whole environment (`env` or `printenv` alone, `export -p`, `declare -p`, `set` alone), or printing a variable whose name marks a credential (`printenv GITLAB_TOKEN`, `echo "$DB_PASSWORD"`) or whose value is shaped like a key: **asks**; **denied** in agent mode. `${#NAME}`, the length, passes | hook, on Bash; the skills for everything else |
 | PROD-1 | a database client (`psql`, `pg_restore`, `mysql`, `mariadb`, `sqlcmd`, `mongosh`, `redis-cli`, `cqlsh`, `clickhouse`) whose target carries a production marker (`prod`, `production`, or `production.markers`) in the command, in a variable the command uses, or in `PGHOST` or `MYSQL_HOST`, and runs a write, or reads its statements from a file, stdin or an interactive session: **asks**; **denied** in agent mode. A read statement passes | hook, on Bash; the skills for every other way to reach production |
-| RUN-4 | a command that sets `AGENTIC_SDLC_UNATTENDED` (a leading assignment, `env`, `export`): **runs**, and the start is recorded; the run it starts follows RUN-1 | hook |
+| RUN-4 | a command that sets `AGENTIC_SDLC_UNATTENDED` (a leading assignment, `env`, `export`), or `agentic-sdlc run`: **runs**, and the start is recorded; the run it starts follows RUN-1 | hook |
 | RUN-1 | in confirm mode, with `AGENTIC_SDLC_UNATTENDED` set in the environment of the Claude Code process (`.agentic-sdlc.json` cannot set it): no call **asks**. A commit on a branch that is not protected passes; a push passes only to a branch in `unattended.push_branches` that is not protected, with no force, tags, deletion or mirror; every other call that would ask is **denied** with a reason that tells the agent not to retry and to list the call in its run report ([ADR 0007](docs/adr/0007-an-unattended-run-never-waits-on-a-person.md)) | hook, opt-in |
 | VOICE-3 to VOICE-8 | dashes as punctuation, counting framings, closing offers, banned words in the prose a repository names through `voice-paths`: **fails the check** | CI, when `voice-paths` is set |
 
@@ -350,8 +350,9 @@ agentic-sdlc run fix-parser "Fix the parser; done when just check passes"
 
 The run gets its own branch, `agent/fix-parser`, in a worktree beside the checkout
 (`../<repository>.fix-parser`). It runs Claude Code in print mode, or `codex exec` with
-`--agent codex`, with nothing that can prompt, and returns at once. The run detaches from the
-terminal, keeps the Mac awake while it works, and ends at its spend cap (`--budget`, 20 USD by
+`--agent codex`, with nothing that can prompt, and returns at once. The launcher needs macOS or
+Linux. The run detaches from the terminal, holds off idle sleep on macOS while it works, and ends
+at its spend cap (`--budget`, 20 USD by
 default, Claude Code only) or its time limit (`--hours`, 8 by default). It finishes with the run
 report in `.agent/run-report.md` on its branch.
 
@@ -370,13 +371,13 @@ trusted once in an interactive session first.
 
 ## Try the hook by hand
 
-The CLI's PyPI distribution is `agentic-sdlc-guard`; the command it installs is `agentic-sdlc`.
-The PyPI project named `agentic-sdlc` is a different project, so never run `uvx agentic-sdlc`.
-For the development version at the repository's head instead of the release, use
-`uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc`:
+The package is `agentic-sdlc-guard` and the command it installs is `agentic-sdlc`. Install it from
+this repository: the package is not on PyPI, and the PyPI project named `agentic-sdlc` is a
+different project, so never run `uvx agentic-sdlc`. The URL below gives the head of `main`; add
+`@<tag>` to it for a release tag:
 
 ```bash
-alias agentic-sdlc='uvx --from agentic-sdlc-guard agentic-sdlc'
+alias agentic-sdlc='uvx --from git+https://github.com/anivar/agentic-sdlc agentic-sdlc'
 agentic-sdlc guard 'git add -A'
 agentic-sdlc guard 'git commit -m "Fix parser" -m "Co-Authored-By: Claude <noreply@anthropic.com>"'
 agentic-sdlc guard 'git push --force origin main'
@@ -422,7 +423,8 @@ just codex-check      # load the plugin into a throwaway Codex home; Codex must 
 ```
 
 CI runs the suite on Python 3.9 and 3.14 and on the stock macOS interpreter, validates the plugin
-in strict mode, and installs every skill with the skills CLI into a throwaway home. A release is
+in strict mode, installs every skill with the skills CLI into a throwaway home, and loads the
+plugin into Codex to check that it sees every skill. A release is
 created from the CHANGELOG section when a version tag is first pushed; a moved tag does not
 run it again.
 
