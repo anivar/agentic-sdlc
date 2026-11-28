@@ -37,6 +37,7 @@ from agentic_sdlc import (  # noqa: E402
     guard,
     record,
     registry,
+    runs,
     text,
 )
 from agentic_sdlc import config as config_mod  # noqa: E402
@@ -201,11 +202,113 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config-dir", default=".", help="repository directory")
     p.set_defaults(func=cmd_check_mr)
 
+    p = sub.add_parser("run", help="start a long-running agent run that nobody has to watch")
+    p.add_argument(
+        "name", nargs="?", help="the run's name: lower case, digits, - and _, 32 at most"
+    )
+    p.add_argument("task", nargs="?", help="the task and its finish condition, quoted")
+    p.add_argument("--agent", choices=["claude", "codex"], default="claude")
+    p.add_argument("--budget", type=float, default=20.0, help="spend cap in USD (Claude Code only)")
+    p.add_argument("--hours", type=float, default=8.0, help="time limit; the run is ended after it")
+    p.add_argument("--base", default="HEAD", help="where the run's branch starts")
+    p.add_argument("--wait", action="store_true", help="stay until the run ends")
+    p.add_argument("--dry-run", action="store_true", help="print the run record; create nothing")
+    p.add_argument("--cwd", default=".", help="a directory inside the repository")
+    p.add_argument("--supervise", help=argparse.SUPPRESS)
+    p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("runs", help="list the runs, or read, wait for or stop one by its name")
+    p.add_argument("action", nargs="?", choices=["list", "read", "wait", "stop"], default="list")
+    p.add_argument("name", nargs="?")
+    p.add_argument("--lines", type=int, default=40, help="read: how many lines of the log")
+    p.add_argument("--timeout", type=float, help="wait: seconds before giving up (exit 3)")
+    p.add_argument("--json", action="store_true", help="list: the records as JSON")
+    p.add_argument("--cwd", default=".")
+    p.set_defaults(func=cmd_runs)
+
     p = sub.add_parser("bench", help="time the decision on a set of commands")
     p.add_argument("--iterations", type=int, default=50)
     p.add_argument("--cwd", default=".")
     p.set_defaults(func=cmd_bench)
     return parser
+
+
+# runs --------------------------------------------------------------------------------------
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    if args.supervise:
+        return runs.supervise(Path(args.supervise))
+    if not args.name or not args.task:
+        print(
+            'agentic-sdlc run: give a name and a task: agentic-sdlc run fix-parser "..."',
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        record = runs.plan(
+            args.name,
+            args.task,
+            args.agent,
+            args.budget,
+            args.hours,
+            args.base,
+            Path(args.cwd).resolve(),
+        )
+        if args.dry_run:
+            print(json.dumps(record, indent=2))
+            return 0
+        if runs.on_battery():
+            print(
+                "agentic-sdlc run: on battery; lid close or low battery sleeps the Mac and stops the run",
+                file=sys.stderr,
+            )
+        name = record["name"]
+        limit = (
+            f"{record['budget_usd']:g} USD and {args.hours:g} h"
+            if record["budget_usd"]
+            else f"{args.hours:g} h"
+        )
+        print(
+            f"run {name}: {record['agent']} on {record['branch']} in {record['worktree']}, limit {limit}"
+        )
+        print(f"log {record['log']}")
+        print("  agentic-sdlc runs              every run and its state")
+        print(f"  agentic-sdlc runs read {name}   the end of its log")
+        print(f"  agentic-sdlc runs wait {name}   until it ends")
+        print(f"  agentic-sdlc runs stop {name}   end it")
+        return runs.start(record, wait=args.wait)
+    except runs.RunError as exc:
+        print(f"agentic-sdlc run: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_runs(args: argparse.Namespace) -> int:
+    cwd = Path(args.cwd).resolve()
+    try:
+        if args.action == "list":
+            records = runs.load_all(cwd)
+            if args.json:
+                print(json.dumps(records, indent=2))
+                return 0
+            for r in records:
+                print(
+                    f"{r['name']:<20} {r['state']:<10} {r['agent']:<7} {r['branch']:<28} {r.get('started', '')} {r.get('ended', '')}".rstrip()
+                )
+            return 0
+        if not args.name:
+            print(f"agentic-sdlc runs {args.action}: give the run's name", file=sys.stderr)
+            return 2
+        if args.action == "read":
+            print(runs.read_log(args.name, cwd, args.lines))
+            return 0
+        if args.action == "wait":
+            return runs.wait_for(args.name, cwd, args.timeout)
+        print(runs.stop(args.name, cwd))
+        return 0
+    except runs.RunError as exc:
+        print(f"agentic-sdlc runs: {exc}", file=sys.stderr)
+        return 2
 
 
 # guard -------------------------------------------------------------------------------------

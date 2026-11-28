@@ -1,5 +1,85 @@
 # Changelog
 
+## 2.1.0 (unreleased)
+
+### Added
+
+- `agentic-sdlc run <name> "<task>"` starts a long-running run in one command: a worktree on
+  `agent/<name>`, Claude Code in print mode or `codex exec`, nothing that can prompt, detached
+  from the terminal, the Mac kept awake, a spend cap and a time limit. `agentic-sdlc runs` lists
+  the runs by state, and `runs read`, `runs wait` and `runs stop` act on one by name. Records and
+  logs live under the git common directory. The guard records each start under RUN-4. Ending a
+  run ends the agent's whole process group, and a run whose supervisor is killed shows as
+  orphaned until `runs stop` ends it.
+- `just codex-check` loads the plugin into a throwaway Codex home and checks that Codex sees
+  every skill. The home sits under the user cache folder: a home inside the repository made
+  Codex copy the repository into itself.
+
+### Changed
+
+- Agent mode never asks ([ADR 0009](docs/adr/0009-agent-mode-never-asks.md)). A secret-file
+  read (SECRET-3), an edit of the guard's configuration (GUARD-2) and a gated command the guard
+  could not analyse are refused in agent mode, with AGENT-1 in the reason and the record, where
+  they used to ask. The reason says a person can do it, or can start a session with
+  `AGENTIC_SDLC_MODE=confirm` to be asked. Confirm mode keeps the asks.
+- GUARD-2 covers every way to change the guard's configuration: the file tools, a Codex patch,
+  and the shell (a redirection, `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `rm`, `chmod`, `dd`, and
+  inline interpreter code that names the file). The guarded files add the git configuration
+  files, `.git/hooks`, `.codex/hooks.json`, `.codex/config.toml` and a plugin's
+  `hooks/hooks.json`.
+- GUARD-1 refuses git configuration set through the environment (`GIT_CONFIG_PARAMETERS`,
+  `GIT_CONFIG_COUNT` with its key and value pairs, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`),
+  where a hooks path override cannot be read.
+- SECRET-3 follows a secret file into an input redirection, a command substitution, inline
+  interpreter code, and programs that print or pack their operands (`grep`, `awk`, `sort`,
+  `diff`, `jq`, `openssl`, `tar` and the like).
+- SECRET-2 is enforced by the hook: a print of the whole environment, or of a variable whose
+  name marks a credential, asks in confirm mode and is refused in agent mode. `${#NAME}` passes.
+- PROD-1 is enforced by the hook: a database client call whose command carries a production
+  marker and writes, or reads its statements from a file, stdin or an interactive session,
+  asks in confirm mode and is refused in agent mode. Reads pass. `production.markers` and
+  `production.clients` in `.agentic-sdlc.json` set what counts.
+- TRACE-1 asks for an untraced gated command after a plain file read: `cat x; python3 -c` with
+  a push inside used to pass.
+- The hook fails closed in Codex as well: when it cannot load, or fails outside its analysis,
+  it refuses every shell command with exit 2, which both agents treat as a block. A failed file
+  check refuses the guard's configuration and secret files and passes the rest. Codex file
+  edits (`apply_patch`) reach the file hook.
+- A script with uncommitted changes that an interpreter runs (`python3 read.py`, `bash fix.sh`)
+  is checked: a shell script is parsed as shell, any other is read like inline code. A committed
+  script is reviewed code and is not opened.
+- Inline code that only reads the guard's configuration passes GUARD-2. A production marker
+  inside a statement (`delete from prod_orders`) is no target.
+- PROD-1 reads the target from the values of the variables a command uses and from `PGHOST` and
+  `MYSQL_HOST`; SECRET-2 refuses a print of a variable whose value is shaped like a key. Values
+  stay out of every reason.
+- The shell hook runs through `hooks/guard.sh`, which refuses the command with exit 2 when
+  `python3` is missing or the hook dies outside its own handler.
+- Codex installs the plugin. Codex 0.171 reads `.claude-plugin/marketplace.json` and
+  `plugin.json`, loads every skill, and reads `hooks/hooks.json`; it runs a plugin hook only after
+  a person trusts it. Each hook is one
+  string command, since Codex's command hook has no `args` field. An ask for an event that
+  carries Codex's `turn_id` is refused with the same reason, because Codex takes only a deny from
+  a PreToolUse hook.
+- SETUP-1: the rules block lives in `AGENTS.md`, which Codex reads, and `CLAUDE.md` imports it
+  with `@AGENTS.md`. The setup skill runs its writes in a confirm-mode session, since agent
+  mode refuses an edit of `.agentic-sdlc.json`.
+- The setup asset `.agentic-sdlc.json` names agent mode and lets an unattended run push to
+  `agent/*` branches.
+
+### Fixed
+
+- A single word of 1 MB took the shell hook 20 s to tokenize, near its 30 s timeout, because
+  the tokenizer grows each token a character at a time. Long literal spans now tokenize in
+  linear time to the same tokens: 1 MB in under half a second.
+- `SECURITY.md` states that AGENT-1 and RUN-4 decisions are always recorded, as `record.py`
+  does.
+
+### Not verified
+
+- A live Codex session with the hooks trusted: the tool name Codex sends for a shell call, and
+  that a deny stops the call. `docs/verification.md` has the procedure.
+
 ## 2.0.1 (2026-11-24)
 
 ### Fixed

@@ -80,7 +80,7 @@
         "quiet_rules": {
           "type": "array",
           "default": [],
-          "description": "Ask rules silenced until a date: each entry names an ask rule (ASK-1, ASK-2, ASK-3, TRACE-1, TRACE-2, PUSH-2, SECRET-3, GUARD-2) and an until date in UTC (YYYY-MM-DD). A deny rule here is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason.",
+          "description": "Ask rules silenced until a date: each entry names an ask rule (ASK-1, ASK-2, ASK-3, TRACE-1, TRACE-2, PUSH-2, SECRET-2, SECRET-3, GUARD-2, PROD-1) and an until date in UTC (YYYY-MM-DD). A deny rule here is a config error, an expired entry warns, and a suppressed ask is noted in the decision reason.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -99,6 +99,44 @@
               }
             }
           }
+        }
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the hook treats as production (PROD-1). A database client call whose command text carries a marker is refused in agent mode, and asked about in confirm mode, when its statements write or cannot be read (a file, stdin, an interactive session). Reads pass. The marker is the hook's only view of the target: a connection string in a variable with a neutral name is not seen, so production credentials stay read-only.",
+      "properties": {
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "prod",
+            "production"
+          ],
+          "description": "Patterns, case-insensitive, matched where no letter or digit comes before and no letter after: prod-db, $PROD_URL and orders-production match; products, nonprod and preprod do not. An empty array turns PROD-1 off in the hook."
+        },
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "psql",
+            "pg_restore",
+            "mysql",
+            "mariadb",
+            "sqlcmd",
+            "mongosh",
+            "mongo",
+            "redis-cli",
+            "cqlsh",
+            "clickhouse-client",
+            "clickhouse"
+          ],
+          "description": "Programs the hook checks. A program the hook has no statement flags for is treated as able to write on every call."
         }
       }
     },

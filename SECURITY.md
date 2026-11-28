@@ -24,9 +24,10 @@ Before a commit command runs, the hook records the sha at HEAD in
 file after the command, so the check after a commit can tell whether HEAD moved. That is the
 only write apart from the decision record.
 
-It writes nothing unless the repository turns the decision record on (`record.decisions` or
-`record.shadow` in `.agentic-sdlc.json`, or `AGENTIC_SDLC_RECORD=1` / `AGENTIC_SDLC_SHADOW=1`
-for one session). The record is `<git common dir>/agentic-sdlc/decisions.jsonl`, one JSON line
+It always records a decision the agent makes in place of a person (AGENT-1) and the start of an
+unattended run (RUN-4). It records every other decision only when the repository turns the
+decision record on (`record.decisions` or `record.shadow` in `.agentic-sdlc.json`, or
+`AGENTIC_SDLC_RECORD=1` / `AGENTIC_SDLC_SHADOW=1` for one session). The record is `<git common dir>/agentic-sdlc/decisions.jsonl`, one JSON line
 per decision: time, event, tool, permission mode, decision, rule ids, the reason lines, the
 command kinds, milliseconds, the shadow flag and a truncated SHA-256 of the command. The command
 text is never written; a reason line may name a branch, a file or the trailer a rule matched. A

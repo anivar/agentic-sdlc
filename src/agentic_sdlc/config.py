@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -105,6 +106,31 @@ def unattended_from_env() -> bool:
     return _env_flag(UNATTENDED_ENV)
 
 
+# What marks a command as reaching production (PROD-1): a word in a host, URL, profile,
+# context or variable name, matched where no letter or digit comes before it and no letter after
+# it, so prod-db, $PROD_URL and orders-production match and products, nonprod and preprod do not.
+DEFAULT_PRODUCTION_MARKERS = ("prod", "production")
+# Database clients whose writes to production the hook refuses (PROD-1).
+DEFAULT_DB_CLIENTS = (
+    "psql",
+    "pg_restore",
+    "mysql",
+    "mariadb",
+    "sqlcmd",
+    "mongosh",
+    "mongo",
+    "redis-cli",
+    "cqlsh",
+    "clickhouse-client",
+    "clickhouse",
+)
+
+
+def marker_pattern(marker: str) -> re.Pattern[str]:
+    """A production marker as a case-insensitive pattern bounded by non-letters."""
+    return re.compile(rf"(?<![A-Za-z0-9])(?:{marker})(?![A-Za-z])", re.IGNORECASE)
+
+
 @dataclass
 class Config:
     protected_branches: list[str] = field(default_factory=lambda: ["main", "master"])
@@ -127,6 +153,10 @@ class Config:
     record_path: str = ""
     trace_untracked: str = "allow"
     unattended_push: list[str] = field(default_factory=list)
+    production_markers: list[re.Pattern[str]] = field(
+        default_factory=lambda: [marker_pattern(m) for m in DEFAULT_PRODUCTION_MARKERS]
+    )
+    production_clients: frozenset[str] = frozenset(DEFAULT_DB_CLIENTS)
     source: Path | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -194,6 +224,7 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         "stage",
         "secrets",
         "posting",
+        "production",
         "record",
         "trace",
         "unattended",
@@ -268,6 +299,29 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
             problems.append("trace.untracked must be allow, ask or deny")
     else:
         problems.append("trace must be an object")
+
+    production = data.get("production") or {}
+    if isinstance(production, dict):
+        markers = production.get("markers")
+        if markers is not None:
+            if _is_str_list(markers):
+                compiled = []
+                for marker in markers:
+                    try:
+                        compiled.append(marker_pattern(marker))
+                    except re.error as exc:
+                        problems.append(f"production.markers {marker!r} is not a pattern: {exc}")
+                cfg.production_markers = compiled
+            else:
+                problems.append("production.markers must be an array of strings")
+        clients = production.get("clients")
+        if clients is not None:
+            if _is_str_list(clients):
+                cfg.production_clients = frozenset(c.strip() for c in clients if c.strip())
+            else:
+                problems.append("production.clients must be an array of strings")
+    else:
+        problems.append("production must be an object")
 
     stage = data.get("stage") or {}
     if isinstance(stage, dict):

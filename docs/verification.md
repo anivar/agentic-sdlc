@@ -8,7 +8,7 @@ reaches the permission system in each mode. Record the observed behaviour per mo
 ## Setup
 
 ```bash
-tmp="$(mktemp -d)" && cd "$tmp" && git init -q -b main && git commit -q --allow-empty -m init
+scratch="$HOME/agentic-sdlc-verify-$(date +%Y%m%d)" && mkdir "$scratch" && cd "$scratch" && git init -q -b main && git commit -q --allow-empty -m init
 printf 'EXAMPLE_TOKEN=placeholder\n' > .env
 printf '{"record": {"decisions": true}}\n' > .agentic-sdlc.json
 claude --plugin-dir <path to this repository>
@@ -38,11 +38,23 @@ agent uses do not matter.
 | run `cat .env` | a prompt naming SECRET-3 |
 | read `.env` with the Read tool | a prompt naming SECRET-3 |
 | edit `.agentic-sdlc.json` to set `confirm.commit` to false | a prompt naming GUARD-2 |
+| run `sed -i '' 's/true/false/' .agentic-sdlc.json` | a prompt naming GUARD-2 |
+| run `python3 -c "print(open('.env').read())"` | a prompt naming SECRET-3 |
+| run `env` | a prompt naming SECRET-2 |
+| run `psql "$PROD_URL" -c "delete from t"` | a prompt naming PROD-1 (the command itself fails: no database) |
 
 Run the table in confirm mode (`AGENTIC_SDLC_MODE=confirm` in the environment of `claude`), where
-each rule's own decision shows. In agent mode, the default, every "prompt" row except SECRET-3
-and GUARD-2 runs instead, and
+each rule's own decision shows. In agent mode, the default, no row prompts: every "prompt" row
+except SECRET-2, SECRET-3, GUARD-2 and PROD-1 runs instead, those are refused with AGENT-1 in the
+reason, and
 `agentic-sdlc log` names the rule with AGENT-1; the "refused" rows are still refused.
+
+In Codex, install the plugin (`codex plugin marketplace add`, then `codex plugin add
+agentic-sdlc@agentic-sdlc`), open `codex` in the scratch repository, trust the agentic-sdlc
+hooks when Codex lists them for review, and run the table again. Expected: the agent-mode
+results above, and in confirm mode every "prompt" row refused with "this agent cannot show a
+prompt". Codex rejects an ask from a hook, so no row may prompt there. Record the Codex version
+and the result in `CHANGELOG.md`.
 
 Run the table once in each permission mode: default, `acceptEdits` (`/permissions` or
 `--permission-mode acceptEdits`), auto, `bypassPermissions` and `dontAsk`. The documentation

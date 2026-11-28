@@ -64,6 +64,20 @@ release:
     uv build
     if [ -n "${UV_PUBLISH_TOKEN:-}" ]; then uv publish; else echo "dist/ is built; push a signed v* tag and the release workflow publishes to PyPI"; fi
 
+# Load the plugin into a throwaway Codex home and check that Codex sees every skill.
+codex-check:
+    #!/usr/bin/env sh
+    set -eu
+    # Outside the repository, which Codex copies into its home, and outside the temp directory.
+    home="${XDG_CACHE_HOME:-$HOME/.cache}/agentic-sdlc/codex-home"
+    rm -rf "$home" && mkdir -p "$home"
+    export CODEX_HOME="$home"
+    codex plugin marketplace add "{{justfile_directory()}}" >/dev/null
+    codex plugin add agentic-sdlc@agentic-sdlc >/dev/null
+    codex debug prompt-input > "$home/prompt.json"
+    for dir in skills/*/; do grep -q "agentic-sdlc:$(basename "$dir")" "$home/prompt.json" || { echo "codex does not load $(basename "$dir")"; exit 1; }; done
+    echo "codex loads every skill"
+
 # Newer versions of the development dependencies, if any.
 outdated:
     uv tree --outdated

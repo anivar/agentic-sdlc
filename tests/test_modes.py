@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agentic_sdlc import config as config_mod
-from agentic_sdlc import guard
+from agentic_sdlc import guard, hook, registry
 from tests.conftest import git
 
 SRC = Path(__file__).resolve().parent.parent / "src"
@@ -61,22 +61,26 @@ def test_a_refusal_still_refuses(repo: Path, agent_mode: None, command: str, rul
 
 
 def kept_asks(repo: Path) -> list[guard.Decision]:
-    """A read of a secret-named file, and edits that could switch the refusals off: protected
-    branches emptied, the secret scan or the hook removed."""
+    """A read or print of a secret, a production write, and changes that could switch the
+    refusals off: protected branches emptied, the secret scan or the hook removed."""
     return [
         guard.decide("cat .env", repo, cfg()),
+        guard.decide("printenv GITLAB_TOKEN", repo, cfg()),
+        guard.decide("psql \"$PROD_URL\" -c 'delete from orders'", repo, cfg()),
+        guard.decide("echo '{}' > .agentic-sdlc.json", repo, cfg()),
         guard.decide_file("Read", str(repo / ".env"), repo, cfg()),
         guard.decide_file("Edit", str(repo / ".agentic-sdlc.json"), repo, cfg()),
         guard.decide_file("Write", str(repo / ".claude" / "settings.json"), repo, cfg()),
     ]
 
 
-def test_a_secret_read_or_a_guard_config_edit_still_asks_in_agent_mode(
-    repo: Path, agent_mode: None
-):
+def test_a_kept_ask_is_refused_in_agent_mode(repo: Path, agent_mode: None):
+    """Agent mode never waits on a person; the asks it keeps are refused and recorded."""
+    kept = {"SECRET-2", "SECRET-3", "GUARD-2", "PROD-1"}
     for decision in kept_asks(repo):
-        assert decision.permission == "ask", decision.reason
-        assert {"SECRET-3", "GUARD-2"} & set(decision.rules) and "AGENT-1" not in decision.rules
+        assert decision.permission == "deny", decision.reason
+        assert kept & set(decision.rules) and "AGENT-1" in decision.rules
+        assert "AGENTIC_SDLC_MODE=confirm" in decision.reason
 
 
 def test_a_kept_ask_is_refused_in_an_unattended_agent_mode_run(
@@ -87,9 +91,41 @@ def test_a_kept_ask_is_refused_in_an_unattended_agent_mode_run(
         assert decision.permission == "deny" and "RUN-1" in decision.rules, decision.reason
 
 
-def test_a_kept_ask_beside_an_agent_decision_keeps_the_prompt(repo: Path, agent_mode: None):
+def test_a_kept_ask_beside_an_agent_decision_refuses_the_whole_command(
+    repo: Path, agent_mode: None
+):
     decision = guard.decide('cat .env && git commit -m "x"', repo, cfg())
-    assert decision.permission == "ask" and "AGENT-1" not in decision.rules, decision.reason
+    assert decision.permission == "deny" and "SECRET-3" in decision.rules, decision.reason
+
+
+def ask_examples():
+    """Every command the registry says asks in confirm mode."""
+    for rule in registry.rules():
+        for key in ("examples", "examples_unattended"):
+            for command in (rule.get(key) or {}).get("ask", []):
+                yield pytest.param(command, id=f"{rule['id']}:{key}:{command[:40]}")
+
+
+@pytest.mark.parametrize("command", list(ask_examples()))
+def test_agent_mode_never_asks(repo: Path, agent_mode: None, command: str):
+    """No call stops at a prompt in agent mode: what confirm mode asks about either runs and is
+    recorded, or is refused with a reason the agent acts on."""
+    decision = guard.decide(command, repo, cfg())
+    assert decision.permission in ("allow", "deny"), (command, decision.reason)
+    assert "AGENT-1" in decision.rules or decision.permission == "deny", (command, decision.rules)
+
+
+def test_a_command_the_guard_cannot_analyse_is_refused_in_agent_mode(
+    repo: Path, agent_mode: None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("parser fell over")
+
+    monkeypatch.setattr(guard, "decide", broken)
+    call = hook.Call({"tool_name": "Bash", "tool_input": {"command": "git push"}, "cwd": str(repo)})
+    assert hook.before_bash(call) == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny" and "AGENT-1" in out["permissionDecisionReason"]
 
 
 def test_confirm_mode_from_the_file_asks(repo: Path, agent_mode: None):
@@ -206,15 +242,66 @@ def test_an_agent_decision_is_recorded_with_no_record_setting(repo: Path, comman
     git(repo, "status")
 
 
-def test_a_guard_config_edit_asks_through_the_hook_in_agent_mode(repo: Path):
+def test_a_guard_config_edit_is_refused_through_the_hook_in_agent_mode(repo: Path):
     (repo / ".agentic-sdlc.json").write_text(json.dumps(NO_SCANNER))
     result = run_hook(repo, "Edit", {"file_path": str(repo / ".agentic-sdlc.json")})
     assert result.returncode == 0, result.stderr
     out = json.loads(result.stdout)["hookSpecificOutput"]
-    assert out["permissionDecision"] == "ask" and "GUARD-2" in out["permissionDecisionReason"]
+    assert out["permissionDecision"] == "deny" and "GUARD-2" in out["permissionDecisionReason"]
+    assert "GUARD-2, AGENT-1" in decision_log(repo)
 
 
 def test_a_plain_allow_is_not_recorded_by_default(repo: Path):
     (repo / ".agentic-sdlc.json").write_text(json.dumps(NO_SCANNER))
     assert run_hook(repo, "Bash", {"command": "git status"}).returncode == 0
     assert "no decisions recorded here" in decision_log(repo)
+
+
+def codex_call(repo: Path, command: str) -> hook.Call:
+    """A PreToolUse event shaped as Codex sends it: the shell tool as Bash, plus a turn id."""
+    return hook.Call(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": str(repo),
+            "permission_mode": "default",
+            "turn_id": "turn-1",
+        }
+    )
+
+
+def test_an_ask_is_refused_for_an_agent_that_cannot_prompt(
+    repo: Path, capsys: pytest.CaptureFixture
+):
+    """Codex accepts only deny from a PreToolUse hook, so a confirm-mode ask is refused there,
+    never dropped."""
+    (repo / ".agentic-sdlc.json").write_text(json.dumps(NO_SCANNER))
+    assert hook.before_bash(codex_call(repo, 'git commit --allow-empty -m "x"')) == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny" and "ASK-1" in out["permissionDecisionReason"]
+    assert "cannot show a prompt" in out["permissionDecisionReason"]
+
+
+def test_agent_mode_under_codex_runs_the_commit_and_refuses_the_secret_read(
+    repo: Path, agent_mode: None, capsys: pytest.CaptureFixture
+):
+    (repo / ".agentic-sdlc.json").write_text(json.dumps(NO_SCANNER))
+    assert hook.before_bash(codex_call(repo, "git status")) == 0
+    assert capsys.readouterr().out == ""
+    assert hook.before_bash(codex_call(repo, "cat .env")) == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny" and "SECRET-3" in out["permissionDecisionReason"]
+
+
+def test_the_hook_commands_need_no_args_field():
+    """Codex's command hook has no args field, so each hook is one string command: the shell
+    guard through its wrapper, the others straight to the hook."""
+    hooks = json.loads((Path(__file__).parent.parent / "hooks" / "hooks.json").read_text())
+    for groups in hooks["hooks"].values():
+        for group in groups:
+            for entry in group["hooks"]:
+                assert "args" not in entry, entry
+                assert entry["command"].startswith(
+                    ('python3 "${CLAUDE_PLUGIN_ROOT}/', 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh"')
+                ), entry

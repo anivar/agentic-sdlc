@@ -2,15 +2,15 @@
 name: setup-conventions
 description: >
   One-time repository setup for the agentic-sdlc skills: explore what the repository already
-  has, confirm the choices with the decider, then write one "Rules that bind" block into the
-  existing AGENTS.md or CLAUDE.md, docs/agents/tracker.md and docs/agents/conventions.md, and
-  .agentic-sdlc.json with the hook settings, and prepare the forge's check (the reusable workflow
-  and the ruleset on GitHub, the CI job on GitLab) as a pull request. Run once per repository, by
-  the person who owns it.
+  has, confirm the choices with the decider, then write one "Rules that bind" block into
+  AGENTS.md with an @AGENTS.md line in CLAUDE.md, docs/agents/tracker.md and
+  docs/agents/conventions.md, and .agentic-sdlc.json with the hook settings, and prepare the
+  forge's check (the reusable workflow and the ruleset on GitHub, the CI job on GitLab) as a
+  pull request. Run once per repository, by the person who owns it.
 license: MIT
 disable-model-invocation: true
 argument-hint: "[repository root]"
-compatibility: Any git repository; GitHub gets the workflow and the ruleset, GitLab the CI job, any other forge the git hooks. The tracker section records GitHub, GitLab, local markdown or another tracker.
+compatibility: Any git repository; GitHub gets the workflow and the ruleset, GitLab the CI job, any other forge the git hooks. Claude Code and Codex both read the rules block. The tracker section records GitHub, GitLab, local markdown or another tracker.
 metadata:
   author: Anivar Aravind
   author_url: https://anivar.net
@@ -30,8 +30,8 @@ Nothing is committed, pushed or imported without its own go-ahead (ASK-1, ASK-2,
 Read what exists; assume nothing (EVID-8):
 
 - `git remote -v`: which forge, which repository.
-- `AGENTS.md` and `CLAUDE.md` at the root: which exists, whether a "Rules that bind" block is
-  already there.
+- `AGENTS.md` and `CLAUDE.md` at the root: which exists, where a "Rules that bind" block is
+  already, and whether `CLAUDE.md` already imports `@AGENTS.md`.
 - `docs/agents/`, `.agentic-sdlc.json`, `GLOSSARY.md`, `docs/adr/`, `.scratch/`.
 - `.github/workflows/`: an existing CI gate the ruleset should require.
 - Rulesets and branch protection already applied (`gh ruleset list` on GitHub; the protected
@@ -50,15 +50,19 @@ Lead each section with the recommended answer so the decider can accept it in a 
 - **Decision records**: `docs/adr/` in the repository, or a private path the repository's
   `docs/agents/conventions.md` names.
 - **Mechanisms**: the reusable workflow as a required check, and the ruleset import.
+- **Session**: run the writes in a session started with `AGENTIC_SDLC_MODE=confirm`. In agent
+  mode the guard refuses an agent's write to `.agentic-sdlc.json` (GUARD-2), so step 4 would
+  stop there.
 
 ## 3. Write
 
 In this order, each shown before it is written and each path checked first (DECIDE-5):
 
-1. The "Rules that bind" block into the file that exists, in place if a block is already there
-   (SETUP-1). Template: `assets/AGENTS-block.md` beside this skill. Never create a second agent
-   file beside the existing one; when neither `AGENTS.md` nor `CLAUDE.md` exists, ask which one
-   to create and never pick.
+1. The "Rules that bind" block into `AGENTS.md`, in place if a block is already there
+   (SETUP-1), because Codex and most agents read `AGENTS.md`. Template: `assets/AGENTS-block.md`
+   beside this skill. Claude Code reads `CLAUDE.md`, so a `CLAUDE.md` gets one `@AGENTS.md` line
+   and never a second copy of the block. A block found only in `CLAUDE.md` moves to `AGENTS.md`
+   when the decider says yes; until then it stays and the import is not added.
 2. `docs/agents/tracker.md` (SETUP-2) from `assets/docs-agents/tracker.md`.
 3. `docs/agents/conventions.md` from `assets/docs-agents/conventions.md`.
 4. `.agentic-sdlc.json` from `assets/agentic-sdlc.json`, with the confirmed branches and

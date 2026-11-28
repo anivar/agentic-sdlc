@@ -11,6 +11,7 @@ tell, it reports what it saw and lets ``guard`` decide conservatively.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -130,6 +131,237 @@ SECRET_FILE_RE = re.compile(
 )
 COPY_PROGRAMS = {"cp", "scp", "rsync"}
 SECRET_FILE_EXAMPLE_RE = re.compile(r"\.(example|sample|template|dist|md|txt)$", re.IGNORECASE)
+# Programs beyond SECRET_READERS that print, compare, archive or send a file named on their
+# command line. They count for SECRET-3 only: their kind stays "other", so a search is never
+# mistaken for a traced git call.
+SECRET_PRINTERS = {
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "ag",
+    "awk",
+    "gawk",
+    "sed",
+    "gsed",
+    "sort",
+    "uniq",
+    "nl",
+    "od",
+    "tac",
+    "rev",
+    "cut",
+    "paste",
+    "column",
+    "jq",
+    "yq",
+    "diff",
+    "cmp",
+    "openssl",
+    "gpg",
+    "zcat",
+    "tar",
+    "zip",
+}
+# Files whose change alters what the guard does (GUARD-2), matched on the path's tail. The git
+# configuration files are here because a hooksPath set in one switches the git hooks off, and
+# the Codex files because they hold its hooks and the switch that turns hooks off.
+GUARD_CONFIG_RE = re.compile(
+    r"(^|/)(\.agentic-sdlc\.json|\.pre-commit-config\.yaml|\.claude/settings(\.local)?\.json"
+    r"|\.git/hooks(/[^/]+)?|hooks/hooks\.json|\.codex/(config\.toml|hooks\.json)"
+    r"|\.git/config|\.gitconfig|\.config/git/config)/?$"
+)
+# Programs that change or remove every file named on their command line (GUARD-2).
+FILE_CHANGERS = {
+    "tee",
+    "rm",
+    "unlink",
+    "truncate",
+    "shred",
+    "chmod",
+    "chown",
+    "chgrp",
+    "mv",
+    "sponge",
+}
+# Programs whose last operand is the file they write.
+FILE_COPIERS = {"cp", "install", "ln", "rsync", "scp", "ditto"}
+# Programs that edit their file operands in place when given -i.
+IN_PLACE_EDITORS = {"sed", "gsed", "perl"}
+# Redirections that write their target. The target of >& is a file only when it is not a
+# descriptor digit or "-".
+OUTPUT_REDIRECTS = {">", ">>", ">|", "&>", "&>>", ">&"}
+# Interpreters that run code given on their command line, and the short flags that take it.
+# Python's flag is -c; deno takes its code after the eval subcommand.
+PYTHON_RE = re.compile(r"^(python|pypy)[0-9.]*$")
+INLINE_CODE_FLAGS = {
+    "node": "ep",
+    "nodejs": "ep",
+    "ruby": "e",
+    "perl": "eE",
+    "php": "r",
+    "bun": "e",
+    "osascript": "e",
+}
+INLINE_CODE_LONG = {"--eval", "--print"}
+# Words in inline code that could be a path: the parser cannot run the code, so any word that
+# names a guarded or secret file counts.
+PATHLIKE_RE = re.compile(r"[\w@.~/*+-]+")
+# A variable reference in an argument; ${#NAME} is the length and prints no secret.
+VAR_REF_RE = re.compile(r"\$\{?(?!#)([A-Za-z_][A-Za-z0-9_]*)")
+# Code that names a guarded file changes it only when the code also writes something, so a
+# read of the guard's configuration from inline code passes (GUARD-2).
+CODE_WRITE_RE = re.compile(
+    r"write|append|unlink|remove|rename|replace|truncate|chmod|copy|move|dump|rmdir|rmSync"
+    r"|\brm\b|['\"][wax]b?\+?['\"]|>",
+    re.IGNORECASE,
+)
+# Interpreters that run a script file named as their first operand. A shell's script is parsed
+# as shell; any other script is read like inline code.
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "source", "."}
+SCRIPT_RUNNERS = {"node", "nodejs", "ruby", "perl", "php", "bun", "deno", "osascript"}
+SCRIPT_LIMIT = 256 * 1024
+# Environment variables a database client takes its target from when the command names none
+# (PROD-1).
+CLIENT_TARGET_ENV = {
+    "psql": ("PGHOST", "PGHOSTADDR", "PGSERVICE", "PGDATABASE"),
+    "pg_restore": ("PGHOST", "PGHOSTADDR", "PGSERVICE", "PGDATABASE"),
+    "mysql": ("MYSQL_HOST",),
+    "mariadb": ("MYSQL_HOST",),
+}
+# Parts of a variable name that mark it as holding a credential (SECRET-2).
+SECRET_NAME_PARTS = {
+    "TOKEN",
+    "SECRET",
+    "SECRETS",
+    "PASSWORD",
+    "PASSWD",
+    "PASS",
+    "KEY",
+    "APIKEY",
+    "CREDENTIAL",
+    "CREDENTIALS",
+    "PAT",
+    "DSN",
+    "COOKIE",
+}
+SECRET_NAME_ENDINGS = ("TOKEN", "SECRET", "PASSWORD", "APIKEY")
+# Database clients and the flags that carry an inline statement: short-flag letters, then long
+# flags. A client without an entry is treated as able to write on every call (PROD-1).
+QUERY_FLAGS = {
+    "psql": ("c", ("--command",)),
+    "mysql": ("e", ("--execute",)),
+    "mariadb": ("e", ("--execute",)),
+    "sqlcmd": ("Qq", ()),
+    "mongosh": ("", ("--eval",)),
+    "mongo": ("", ("--eval",)),
+    "cqlsh": ("e", ("--execute",)),
+    "clickhouse-client": ("q", ("--query",)),
+    "clickhouse": ("q", ("--query",)),
+}
+# Flags that read statements from a file the hook does not open.
+QUERY_FILE_FLAGS = {
+    "psql": ("-f", "--file"),
+    "sqlcmd": ("-i",),
+    "cqlsh": ("-f", "--file"),
+    "mongosh": ("-f", "--file"),
+    "clickhouse-client": ("--queries-file",),
+    "clickhouse": ("--queries-file",),
+}
+# Statement text that changes data, schema or grants, or runs a file (psql \i).
+SQL_WRITE_RE = re.compile(
+    r"\b(?:insert|update|delete|merge|upsert|drop|alter|truncate|create|grant|revoke|call|exec"
+    r"|execute|vacuum|reindex|cluster|replace\s+into|load\s+data|refresh\s+materialized"
+    r"|comment\s+on)\b"
+    r"|\bcopy\b[\s\S]*?\bfrom\b"
+    r"|\\(?:ir?|include(?:_relative)?)\b",
+    re.IGNORECASE,
+)
+# A MongoDB shell method that writes.
+MONGO_WRITE_RE = re.compile(
+    r"\.(?:insert|update|delete|replace|remove|drop|bulkWrite|findOneAnd|findAndModify|rename"
+    r"|createIndex|createCollection)\w*\s*\("
+)
+REDIS_WRITE_VERBS = {
+    "set",
+    "setex",
+    "psetex",
+    "setnx",
+    "mset",
+    "msetnx",
+    "append",
+    "del",
+    "unlink",
+    "getdel",
+    "getset",
+    "expire",
+    "pexpire",
+    "expireat",
+    "persist",
+    "rename",
+    "renamenx",
+    "incr",
+    "incrby",
+    "decr",
+    "decrby",
+    "hset",
+    "hmset",
+    "hdel",
+    "hincrby",
+    "lpush",
+    "rpush",
+    "lpop",
+    "rpop",
+    "lrem",
+    "lset",
+    "ltrim",
+    "sadd",
+    "srem",
+    "spop",
+    "zadd",
+    "zrem",
+    "zincrby",
+    "xadd",
+    "xdel",
+    "xtrim",
+    "flushall",
+    "flushdb",
+    "config",
+    "eval",
+    "evalsha",
+    "script",
+    "function",
+    "fcall",
+    "restore",
+    "migrate",
+    "move",
+    "copy",
+    "swapdb",
+    "shutdown",
+    "debug",
+    "bgsave",
+    "save",
+    "replicaof",
+    "slaveof",
+}
+REDIS_VALUE_FLAGS = {
+    "-h",
+    "-p",
+    "-s",
+    "-a",
+    "-u",
+    "-n",
+    "-r",
+    "-i",
+    "-d",
+    "--user",
+    "--pass",
+    "--cacert",
+    "--cacertdir",
+    "--cert",
+    "--key",
+    "--sni",
+}
 CONFIG_READ_FORMS = {
     "--get",
     "--get-all",
@@ -362,6 +594,11 @@ class Facts:
     no_verify: bool = False
     hooks_path_override: bool = False
     reads_secret_file: list[str] = field(default_factory=list)
+    writes_guard_config: list[str] = field(default_factory=list)
+    prints_secret: str = ""
+    printed_variables: list[str] = field(default_factory=list)
+    script: str = ""
+    starts_run: bool = False
 
     @property
     def program(self) -> str:
@@ -400,8 +637,9 @@ class Parsed:
 
     @property
     def traced(self) -> bool:
-        """True when at least one simple command was recognised as git, gh or glab."""
-        return any(c.kind != "other" for c in self.commands)
+        """True when at least one simple command was recognised as git, gh or glab. A file read
+        is not a trace: "cat README.md; python3 -c ..." must not hide the interpreter call."""
+        return any(c.kind not in ("other", "read") for c in self.commands)
 
 
 def split_heredocs(raw: str) -> tuple[str, list[str]]:
@@ -545,14 +783,79 @@ def _strip_redirections(tokens: list[str]) -> list[str]:
     return out
 
 
+# shlex builds each token a character at a time, which is quadratic in the token's length: one
+# 1 MB word took 20 s, near the hook's timeout. Spans shlex gives no structure (a single-quoted
+# string, a double-quoted one with no backslash, a run of plain word characters) are swapped
+# for a placeholder before it runs and put back in the tokens after, so the tokens are unchanged.
+LONG_SPAN = 4096
+PLAIN_STOP = frozenset(" \t\r\n'\"\\();<>|&")
+PLACEHOLDER_RE = re.compile("\ue000([0-9]+)\ue001")
+
+
 def tokenize(line: str) -> list[str]:
-    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    shielded, spans = _shield_long_spans(line)
+    lexer = shlex.shlex(shielded, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
-        return list(lexer)
+        tokens = list(lexer)
     except ValueError:
         return line.split()
+    if not spans:
+        return tokens
+    return [PLACEHOLDER_RE.sub(lambda m: spans[int(m.group(1))], tok) for tok in tokens]
+
+
+def _shield_long_spans(line: str) -> tuple[str, list[str]]:
+    """``line`` with each literal span of LONG_SPAN characters or more replaced by a numbered
+    placeholder, and the spans. A linear scan that follows shlex's quoting rules."""
+    if len(line) < LONG_SPAN or "\ue000" in line or "\ue001" in line:
+        return line, []
+    spans: list[str] = []
+    out: list[str] = []
+
+    def keep(text: str, quote: str = "") -> None:
+        if len(text) >= LONG_SPAN:
+            out.append(f"{quote}\ue000{len(spans)}\ue001{quote}")
+            spans.append(text)
+        else:
+            out.append(f"{quote}{text}{quote}")
+
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if c == "'":
+            end = line.find("'", i + 1)
+            if end < 0:
+                break
+            keep(line[i + 1 : end], "'")
+            i = end + 1
+        elif c == '"':
+            end, escaped = i + 1, False
+            while end < n and line[end] != '"':
+                escaped = escaped or line[end] == "\\"
+                end += 2 if line[end] == "\\" else 1
+            if end >= n:
+                break
+            if escaped:
+                out.append(line[i : end + 1])
+            else:
+                keep(line[i + 1 : end], '"')
+            i = end + 1
+        elif c == "\\":
+            out.append(line[i : i + 2])
+            i += 2
+        elif c in PLAIN_STOP:
+            out.append(c)
+            i += 1
+        else:
+            end = i
+            while end < n and line[end] not in PLAIN_STOP:
+                end += 1
+            keep(line[i:end])
+            i = end
+    out.append(line[i:])
+    return "".join(out), spans
 
 
 def simple_commands(text: str) -> list[list[str]]:
@@ -708,8 +1011,25 @@ def classify(
     tokens: list[str], cwd: Path | None = None, extra_posting: Iterable[str] = ()
 ) -> Facts:
     facts = Facts(tokens=list(tokens), workdir=cwd)
-    rest = _strip_wrappers(_strip_redirections(tokens))
+    stripped = _strip_redirections(tokens)
+    writes, reads = redirect_targets(tokens)
+    rest = _strip_wrappers(stripped)
+    facts.prints_secret, facts.printed_variables = environment_print(stripped)
+    code = inline_code(rest)
+    if not code:
+        shell, script = script_file(rest, cwd)
+        if shell:
+            facts.script = script  # the guard parses it as shell
+        elif script:
+            code = [script]
+    code_words = [word for text in code for word in PATHLIKE_RE.findall(text)]
+    code_writes = [
+        w for text in code if CODE_WRITE_RE.search(text) for w in PATHLIKE_RE.findall(text)
+    ]
+    targets = writes + file_write_targets(rest) + code_writes
+    facts.writes_guard_config = _unique([t for t in targets if is_guard_config(t)])
     if not rest:
+        facts.reads_secret_file = _unique([r for r in reads if is_secret_file(r)])
         return facts
     program = _basename(rest[0])
     args = rest[1:]
@@ -723,10 +1043,17 @@ def classify(
         if program in COPY_PROGRAMS:
             operands = operands[:-1]  # the last operand is the destination, a write
         facts.reads_secret_file = [a for a in operands if is_secret_file(a)]
+    elif program in SECRET_PRINTERS:
+        operands = [a for a in args if not a.startswith("-")]
+        facts.reads_secret_file = [a for a in operands if is_secret_file(a)]
+    elif program == "agentic-sdlc" and args[:1] == ["run"] and "--dry-run" not in args:
+        facts.starts_run = True
     elif program == "gh":
         _classify_gh(facts, args)
     elif program == "glab":
         _classify_glab(facts, args)
+    hidden = [r for r in reads + code_words if is_secret_file(r)]
+    facts.reads_secret_file = _unique(facts.reads_secret_file + hidden)
     joined = " ".join(rest)
     for pattern in extra_posting:
         try:
@@ -738,6 +1065,281 @@ def classify(
         except re.error:
             continue
     return facts
+
+
+def _unique(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+# Environment variables that set git configuration for every git call they reach, hooksPath
+# included (GUARD-1).
+GIT_CONFIG_ENV = {
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG",
+}
+
+
+def sets_git_config(name: str) -> bool:
+    """True for a variable that hands git configuration to the git calls after it."""
+    return name in GIT_CONFIG_ENV or name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))
+
+
+def is_guard_config(path: str) -> bool:
+    """True when the path names a file whose change alters what the guard does (GUARD-2)."""
+    return GUARD_CONFIG_RE.search(path.replace("\\", "/")) is not None
+
+
+def redirect_targets(tokens: list[str]) -> tuple[list[str], list[str]]:
+    """The files a simple command's redirections write and read. A descriptor (2>&1, >&-) is
+    not a file; a heredoc tag and a here-string are not files either."""
+    writes: list[str] = []
+    reads: list[str] = []
+    for index, token in enumerate(tokens[:-1]):
+        target = tokens[index + 1]
+        if token in OUTPUT_REDIRECTS and not target.isdigit() and target != "-":
+            writes.append(target)
+        elif token == "<":
+            reads.append(target)
+    return writes, reads
+
+
+def file_write_targets(rest: list[str]) -> list[str]:
+    """The files a program named on the command line changes: every operand of tee, rm, mv,
+    chmod and the like, the last operand of cp, install, ln and rsync, the operands of sed or
+    perl given -i, and dd's of= file."""
+    if not rest:
+        return []
+    program = _basename(rest[0])
+    args = rest[1:]
+    operands = [a for a in args if not a.startswith("-")]
+    if program in FILE_CHANGERS:
+        return operands
+    if program in FILE_COPIERS:
+        return operands[-1:]
+    if program in IN_PLACE_EDITORS:
+        in_place = any(
+            a.startswith("--in-place") or ("i" in _short_flags(a) and not a.startswith("--"))
+            for a in args
+        )
+        return operands if in_place else []
+    if program == "dd":
+        return [a[3:] for a in args if a.startswith("of=")]
+    return []
+
+
+def flag_values(
+    args: list[str], letters: str, longs: Iterable[str], attached: bool = False
+) -> list[str]:
+    """The values given to the short flags in letters (-c 'x'; -c'x' when attached is set) and
+    to the long flags in longs (--eval 'x', --eval='x')."""
+    out: list[str] = []
+    for index, token in enumerate(args):
+        if token.startswith("--"):
+            key, eq, value = token.partition("=")
+            if key in longs:
+                if eq:
+                    out.append(value)
+                elif index + 1 < len(args):
+                    out.append(args[index + 1])
+            continue
+        flags = _short_flags(token)
+        if not flags:
+            continue
+        if flags[-1] in letters and index + 1 < len(args):
+            out.append(args[index + 1])
+        elif attached and flags[0] in letters and len(flags) > 1 and not flags[1:].isalpha():
+            out.append(flags[1:])
+    return out
+
+
+def inline_code(rest: list[str]) -> list[str]:
+    """The code an interpreter runs from its own command line (python -c, node -e, perl -e,
+    ruby -e, php -r, bun -e, deno eval), which the parser can read but not follow."""
+    if not rest:
+        return []
+    name = _basename(rest[0])
+    args = rest[1:]
+    if name == "deno":
+        return args[1:2] if args[:1] == ["eval"] else []
+    letters = "c" if PYTHON_RE.match(name) else INLINE_CODE_FLAGS.get(name)
+    if letters is None:
+        return []
+    return flag_values(args, letters, INLINE_CODE_LONG, attached=True)
+
+
+def script_file(rest: list[str], cwd: Path | None) -> tuple[bool, str]:
+    """The script an interpreter runs from a file (bash deploy.sh, python3 tool.py, node x.js)
+    as (is_shell, text). Only a script with uncommitted changes is opened: new, edited, ignored,
+    untracked, or outside any repository. A committed script is reviewed code. A secret file is
+    never opened, and neither is a file over 256 KB."""
+    if not rest:
+        return False, ""
+    name = _basename(rest[0])
+    args = rest[1:]
+    shell = name in SHELLS
+    if name == "deno":
+        args = args[1:] if args[:1] == ["run"] else []
+    elif not (shell or PYTHON_RE.match(name) or name in SCRIPT_RUNNERS):
+        return False, ""
+    operand = ""
+    for token in args:
+        flags = _short_flags(token)
+        if (shell and "c" in flags) or (PYTHON_RE.match(name) and "m" in flags):
+            return False, ""  # inline code or a module, not a file
+        if not token.startswith("-"):
+            operand = token
+            break
+    script = _resolve(cwd, operand) if operand else None
+    if script is None or is_secret_file(operand):
+        return False, ""
+    try:
+        if not script.is_file() or script.stat().st_size > SCRIPT_LIMIT or _committed(script):
+            return False, ""
+        return shell, script.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False, ""
+
+
+def _committed(file: Path) -> bool:
+    """True when git tracks the file and it has no change in the work tree or the index."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(file.parent), "status", "--porcelain", "--ignored", "--", file.name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and not result.stdout.strip()
+
+
+def environment_value(name: str) -> str:
+    """A variable's value in the hook's environment, which the shell tool's commands inherit.
+    The guard matches it against patterns and never puts it into a reason."""
+    return os.environ.get(name, "")
+
+
+def secret_variable(name: str) -> bool:
+    """True when a variable's name marks it as holding a credential: GITLAB_TOKEN,
+    AWS_SECRET_ACCESS_KEY, DB_PASSWORD. PATH, HOME and PWD are not."""
+    upper = name.upper()
+    parts = upper.split("_")
+    return any(part in SECRET_NAME_PARTS for part in parts) or upper.endswith(SECRET_NAME_ENDINGS)
+
+
+def environment_print(stripped: list[str]) -> tuple[str, list[str]]:
+    """Why a simple command prints credentials from the environment (SECRET-2), and the
+    variables it prints by name. The reason covers the whole environment (env or printenv with
+    no command or name, export -p, declare -p, set alone) and a variable whose name marks a
+    credential; the guard checks the values of the other printed variables."""
+    rest = list(stripped)
+    while rest and ENV_ASSIGN_RE.match(rest[0]):
+        rest.pop(0)
+    if not rest:
+        return "", []
+    reason, printed = _environment_print(rest)
+    return reason, printed
+
+
+def _environment_print(rest: list[str]) -> tuple[str, list[str]]:
+    name = _basename(rest[0])
+    args = rest[1:]
+    if name == "env":
+        if any(a in ("-i", "--ignore-environment") or a == "-" for a in args):
+            return "", []
+        index = 0
+        while index < len(args):
+            token = args[index]
+            if token in ("-u", "--unset", "-C", "--chdir"):
+                index += 2
+                continue
+            if token.startswith("-") or ENV_ASSIGN_RE.match(token):
+                index += 1
+                continue
+            return "", []  # env runs a command: a wrapper, not a print
+        return "env with no command prints the whole environment, credentials included", []
+    if name == "printenv":
+        names = [a for a in args if not a.startswith("-")]
+        if not names:
+            return "printenv with no name prints the whole environment, credentials included", []
+        secret = [n for n in names if secret_variable(n)]
+        if secret:
+            return f"printenv {' '.join(secret[:3])} prints a credential", names
+        return "", names
+    if name in ("export", "declare", "typeset") and all(a.startswith("-") for a in args):
+        if name == "export" or any(set(_short_flags(a)) & {"p", "x"} for a in args):
+            return f"{' '.join(rest)} prints every exported variable, credentials included", []
+        return "", []
+    if name == "set" and not args:
+        return "set with no arguments prints every variable, credentials included", []
+    if name in ("echo", "printf"):
+        named = _unique([m.group(1) for a in args for m in VAR_REF_RE.finditer(a)])
+        secret = [n for n in named if secret_variable(n)]
+        if secret:
+            return f"{name} ${secret[0]} prints a credential", named
+        return "", named
+    return "", []
+
+
+def database_write(tokens: list[str], clients: Iterable[str]) -> tuple[str, list[str]]:
+    """Why a database client call can change data (PROD-1), with the statements it was given.
+    It can change data when a statement writes, or when the hook cannot read the statements (a
+    file, stdin, an interactive session, a client it has no flag table for). The reason is empty
+    for a client call that only runs read statements, or for a program that is no client."""
+    rest = _strip_wrappers(_strip_redirections(tokens))
+    if not rest or _basename(rest[0]) not in set(clients):
+        return "", []
+    statements = _statements(rest)
+    return _database_write(rest, statements), statements
+
+
+def _statements(rest: list[str]) -> list[str]:
+    name = _basename(rest[0])
+    if name not in QUERY_FLAGS:
+        return []
+    letters, longs = QUERY_FLAGS[name]
+    return flag_values(rest[1:], letters, longs)
+
+
+def _database_write(rest: list[str], statements: list[str]) -> str:
+    name = _basename(rest[0])
+    args = rest[1:]
+    if name == "pg_restore":
+        return "pg_restore writes a dump into the database"
+    if name == "redis-cli":
+        index = 0
+        while index < len(args):
+            token = args[index]
+            if token in REDIS_VALUE_FLAGS:
+                index += 2
+                continue
+            if token.startswith("-"):
+                index += 1
+                continue
+            verb = token.lower()
+            if verb in REDIS_WRITE_VERBS:
+                return f"runs the write command {token}"
+            return ""
+        return "reads its commands from stdin or an interactive session, which the hook cannot see"
+    if name not in QUERY_FLAGS:
+        return f"{name} has no statement flags the hook knows, so any call may write"
+    file_flags = QUERY_FILE_FLAGS.get(name, ())
+    for token in args:
+        key, _, value = token.partition("=")
+        if key in file_flags:
+            return f"runs the statements in a file ({value or 'named after ' + key}), which the hook does not open"
+    if not statements:
+        return "reads its statements from stdin, a file or an interactive session, which the hook cannot see"
+    text = " ".join(statements)
+    found = SQL_WRITE_RE.search(text) or MONGO_WRITE_RE.search(text)
+    if found:
+        return f"runs a write ({found.group(0).strip()[:24]})"
+    return ""
 
 
 def is_secret_file(path: str) -> bool:
