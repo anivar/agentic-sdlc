@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 (unreleased)
+## 2.1.0 (2026-11-28)
 
 ### Added
 
@@ -92,8 +92,6 @@
 
 - A live Codex session with the hooks trusted: the tool name Codex sends for a shell call, and
   that a deny stops the call. `docs/verification.md` has the procedure.
-- The `codex` job on a GitHub runner. The same steps pass locally as `just codex-check` with
-  Codex 0.172.0.
 
 ## 2.0.1 (2026-11-24)
 
